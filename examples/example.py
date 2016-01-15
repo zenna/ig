@@ -8,7 +8,6 @@ from ig.render import make_render, gen_fragcoords, similarity_cost
 # from ig.display import draw
 import numpy as np
 from theano import config
-config.device = 'cpu'
 
 
 def go():
