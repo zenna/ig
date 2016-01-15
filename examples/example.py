@@ -5,7 +5,7 @@ Usage example employing ig
 """
 import ig
 from ig.render import make_render, gen_fragcoords, similarity_cost
-from ig.display import draw
+# from ig.display import draw
 import numpy as np
 from theano import config
 
@@ -32,8 +32,8 @@ print("Rendering")
 img = render(exfragcoords, shapes)
 img_tiled = np.tile(img,(1,3,1,1)) # Tile because vgg expects RGB but img is depth
 
-print("Drawing Img")
-draw(img)
+# print("Drawing Img")
+# draw(img)
 
 ## Render the image to create an observation
 print("Compiling VGG")
