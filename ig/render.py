@@ -6,10 +6,11 @@ import numpy
 import pickle
 
 from features import *
+from theano.compile.nanguardmode import NanGuardMode
 
 
 ## THe function will take as input
-# theano.config.optimizer = 'None'
+theano.config.optimizer = 'None'
 def mindist(translate, radii, min_so_far, ro, rd, background):
     ro = ro + translate
     d_o = T.dot(rd, ro)     # 640, 480
@@ -88,7 +89,7 @@ def make_render(nprims, width, height):
     shape_params = T.matrix('shape')
     fragCoords = T.tensor3()
     res, updates = symbolic_render(nprims, shape_params, fragCoords, width, height)
-    render = function([fragCoords, shape_params], res, updates=updates, mode='DebugMode')
+    render = function([fragCoords, shape_params], res, updates=updates, mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True))
     return render
 
 # This generates a d
@@ -101,7 +102,7 @@ def similarity_cost(observed_features, nprims, width, height):
     proposal_features = vgg_features(res_tiled)
     cost = feature_compare(proposal_features,shared_observed_features)
     cost_grad = T.grad(cost, shape_params)
-    cost_compiled = function([fragCoords, shape_params], [res, cost, cost_grad], updates=updates, mode='DebugMode')
+    cost_compiled = function([fragCoords, shape_params], [res, cost, cost_grad], updates=updates, mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True))
     return cost_compiled
 
 def gen_fragcoords(width, height):
