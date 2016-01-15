@@ -66,6 +66,7 @@ def gen_vgg():
     return function([inp_img], output)
 
 def feature_compare(features, observed_features):
-    dists = [(features[i] - observed_features[i])**2 for i in range(len(features))]
-    summed_dists = [T.sum(dist) for dist in dists]
-    return sum(summed_dists)
+    return T.sum((features[8] - observed_features[8])**2)
+    # dists = [(features[i] - observed_features[i])**2 for i in range(len(features))]
+    # summed_dists = [T.sum(dist) for dist in dists]
+    # return sum(summed_dists)
