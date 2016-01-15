@@ -10,7 +10,7 @@ from theano.compile.nanguardmode import NanGuardMode
 
 
 ## THe function will take as input
-theano.config.optimizer = 'None'
+# theano.config.optimizer = 'None'
 def mindist(translate, radii, min_so_far, ro, rd, background):
     ro = ro + translate
     d_o = T.dot(rd, ro)     # 640, 480
