@@ -35,7 +35,7 @@ def vgg_features(img):
     net['fc8'] = DenseLayer(net['drop7'], num_units=1000, nonlinearity=lasagne.nonlinearities.softmax)
     output_layer = net['fc8']
 
-    model = pickle.load(open('/home/zenna/repos/InverseGraphics/data/vgg_cnn_s.pkl'))
+    model = pickle.load(open('data/vgg_cnn_s.pkl'))
     CLASSES = model['synset words']
     MEAN_IMAGE = model['mean image']
 
