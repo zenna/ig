@@ -54,8 +54,10 @@ def vgg_features(img):
     drop6_th = lasagne.layers.get_output(net['drop6'])
     fc7_th = lasagne.layers.get_output(net['fc7'])
     output_layer_th = lasagne.layers.get_output(output_layer)
+    #return (conv1_th, norm1_th, pool1_th, conv2_th, pool2_th, conv3_th, conv4_th,
+    #        conv5_th, pool5_th, fc6_th, drop6_th, fc7_th, output_layer_th)
     return (conv1_th, norm1_th, pool1_th, conv2_th, pool2_th, conv3_th, conv4_th,
-            conv5_th, pool5_th, fc6_th, drop6_th, fc7_th, output_layer_th)
+            conv5_th, pool5_th)
 
 def gen_vgg():
     """Generate an executable VGG Network"""
@@ -65,5 +67,5 @@ def gen_vgg():
 
 def feature_compare(features, observed_features):
     dists = [(features[i] - observed_features[i])**2 for i in range(len(features))]
-    summed_dists = sum(dists)
-    return summed_dists
+    summed_dists = [T.sum(dist) for dist in dists]
+    return sum(summed_dists)

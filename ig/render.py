@@ -82,14 +82,27 @@ def symbolic_render(nprims, shape_params, fragCoords, width, height):
     # Get ray direction
     rd = T.stack([a,b,c], axis=2)
     ro_ = np.tile(ro, [width, height, 1])
-    res, updates = renderrays(ro, rd, shape_params, nprims, width, height)
-    render = function([fragCoords, shape_params], res, updates=updates)
-    return render
+    return renderrays(ro, rd, shape_params, nprims, width, height)
 
 def make_render(nprims, width, height):
     shape_params = T.matrix('shape')
     fragCoords = T.tensor3()
-    return symbolic_render(nprims, shape_params, fragCoords, width, height)
+    res, updates = symbolic_render(nprims, shape_params, fragCoords, width, height)
+    render = function([fragCoords, shape_params], res, updates=updates, mode='DebugMode')
+    return render
+
+# This generates a d
+def similarity_cost(observed_features, nprims, width, height):
+    shared_observed_features = [shared(feature) for feature in observed_features]
+    shape_params = T.matrix('shape')
+    fragCoords = T.tensor3()
+    res, updates = symbolic_render(nprims, shape_params, fragCoords, width, height)
+    res_tiled = T.tile(res,(1,3,1,1))
+    proposal_features = vgg_features(res_tiled)
+    cost = feature_compare(proposal_features,shared_observed_features)
+    cost_grad = T.grad(cost, shape_params)
+    cost_compiled = function([fragCoords, shape_params], [res, cost, cost_grad], updates=updates, mode='DebugMode')
+    return cost_compiled
 
 def gen_fragcoords(width, height):
     """Create a (width * height * 2) matrix, where element i,j is [i,j]
