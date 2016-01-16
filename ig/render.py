@@ -105,6 +105,17 @@ def similarity_cost(observed_features, nprims, width, height):
     cost_compiled = function([fragCoords, shape_params], [res, cost, cost_grad], updates=updates, mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True))
     return cost_compiled
 
+# This generates a d
+def similarity_cost2(observed_img, nprims, width, height):
+    shared_img = shared(observed_img)
+    shape_params = T.matrix('shape')
+    fragCoords = T.tensor3()
+    res, updates = symbolic_render(nprims, shape_params, fragCoords, width, height)
+    cost = T.sum(T.sqrt((res - observed_img)**2))
+    cost_grad = T.grad(cost, shape_params)
+    cost_compiled = function([fragCoords, shape_params], [res, cost, cost_grad], updates=updates, mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True))
+    return cost_compiled
+
 def gen_fragcoords(width, height):
     """Create a (width * height * 2) matrix, where element i,j is [i,j]
        This is used to generate ray directions based on an increment"""

@@ -30,11 +30,15 @@ for i in range(nprims):
 shapes = np.array(shapes, dtype=config.floatX)
 print("Rendering")
 img = render(exfragcoords, shapes)
-img_tiled = np.tile(img,(1,3,1,1)) # Tile because vgg expects RGB but img is depth
 
 # print("Drawing Img")
 # draw(img)
 
+print("Doing Pixel Comparison")
+cost = similarity_cost2(img, nprims, width, height)
+print(cost(exfragcoords, shapes))
+
+img_tiled = np.tile(img,(1,3,1,1)) # Tile because vgg expects RGB but img is depth
 ## Render the image to create an observation
 print("Compiling VGG")
 vgg_network = ig.features.gen_vgg()
