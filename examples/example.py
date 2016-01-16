@@ -16,6 +16,12 @@ def go():
 def gogo():
     return np.random.rand()*0.1
 
+def genshapes(nprims):
+    shapes = []
+    for i in range(npri(ms):
+        shapes.append([go(), go(), go(), gogo()])
+    return np.array(shapes, dtype=config.floatX)
+
 width = 224
 height = 224
 # Generate initial rays
@@ -23,11 +29,8 @@ exfragcoords = gen_fragcoords(width, height)
 nprims = 500
 print("Compiling Renderer")
 render = make_render(nprims, width, height)
-shapes = []
-for i in range(nprims):
-    shapes.append([go(), go(), go(), gogo()])
 
-shapes = np.array(shapes, dtype=config.floatX)
+shapes = genshapes(nprims)
 print("Rendering")
 img = render(exfragcoords, shapes)
 
