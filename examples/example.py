@@ -4,7 +4,7 @@
 Usage example employing ig
 """
 import ig
-from ig.render import make_render, gen_fragcoords, similarity_cost
+from ig.render import make_render, gen_fragcoords, similarity_cost, similarity_cost2
 # from ig.display import draw
 import numpy as np
 from theano import config
