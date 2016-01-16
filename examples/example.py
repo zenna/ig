@@ -17,10 +17,10 @@ def gogo():
     return np.random.rand()*0.1
 
 def genshapes(nprims):
-    shapes = []
-    for i in range(npri(ms):
-        shapes.append([go(), go(), go(), gogo()])
-    return np.array(shapes, dtype=config.floatX)
+shapes = []
+for i in range(nprims):
+    shapes.append([go(), go(), go(), gogo()])
+return np.array(shapes, dtype=config.floatX)
 
 width = 224
 height = 224
@@ -53,5 +53,7 @@ observed_features = vgg_network(img_tiled)
 print("Compiling Cost Function")
 cost = similarity_cost(observed_features, nprims, width, height)
 print("Evaluating Cost and Gradient")
+
+shapes = genshapes(nprims)
 sim2 = cost(exfragcoords, shapes)
 print(sim2)
