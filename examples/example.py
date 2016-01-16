@@ -17,10 +17,10 @@ def gogo():
     return np.random.rand()*0.1
 
 def genshapes(nprims):
-shapes = []
-for i in range(nprims):
-    shapes.append([go(), go(), go(), gogo()])
-return np.array(shapes, dtype=config.floatX)
+    shapes = []
+    for i in range(nprims):
+        shapes.append([go(), go(), go(), gogo()])
+        return np.array(shapes, dtype=config.floatX)
 
 width = 224
 height = 224
