@@ -37,15 +37,15 @@ img = render(exfragcoords, shapes)
 print("Doing Pixel Comparison")
 cost = similarity_cost2(img, nprims, width, height)
 print(cost(exfragcoords, shapes))
-
-img_tiled = np.tile(img,(1,3,1,1)) # Tile because vgg expects RGB but img is depth
-## Render the image to create an observation
-print("Compiling VGG")
-vgg_network = ig.features.gen_vgg()
-print("Generating Features")
-observed_features = vgg_network(img_tiled)
-
-# similarity_cost
-print("Compiling Cost Function")
-cost = similarity_cost(observed_features, nprims, width, height)
-print(cost(exfragcoords, shapes))
+#
+# img_tiled = np.tile(img,(1,3,1,1)) # Tile because vgg expects RGB but img is depth
+# ## Render the image to create an observation
+# print("Compiling VGG")
+# vgg_network = ig.features.gen_vgg()
+# print("Generating Features")
+# observed_features = vgg_network(img_tiled)
+#
+# # similarity_cost
+# print("Compiling Cost Function")
+# cost = similarity_cost(observed_features, nprims, width, height)
+# print(cost(exfragcoords, shapes))

@@ -1,7 +1,13 @@
 ## Extract features from an image
 import lasagne
+import theano
+import theano.sandbox.cuda.dnn
 from lasagne.layers import InputLayer, DenseLayer, DropoutLayer
-from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
+if theano.sandbox.cuda.dnn.dnn_available():
+    from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
+else:
+    from lasagne.layers import Conv2DLayer as ConvLayer
+
 from lasagne.layers import MaxPool2DLayer as PoolLayer
 from lasagne.layers import LocalResponseNormalization2DLayer as NormLayer
 from lasagne.utils import floatX

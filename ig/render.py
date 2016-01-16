@@ -10,7 +10,7 @@ from theano.compile.nanguardmode import NanGuardMode
 
 
 ## THe function will take as input
-# theano.config.optimizer = 'None'
+theano.config.optimizer = 'None'
 def mindist(translate, radii, min_so_far, ro, rd, background):
     ro = ro + translate
     d_o = T.dot(rd, ro)     # 640, 480
@@ -20,7 +20,9 @@ def mindist(translate, radii, min_so_far, ro, rd, background):
     inner = b **2 - 4 * c   # 640 480
     does_not_intersect = inner < 0.0
     minus_b = -b
-    sqrt_inner = T.sqrt(inner)
+    # sqrt_inner = T.sqrt(T.maximum(0.0001, inner))
+    eps = 1e-9
+    sqrt_inner = T.sqrt(T.maximum(eps, inner))
     root1 = (minus_b - sqrt_inner)/2.0
     root2 = (minus_b + sqrt_inner)/2.0
     depth = T.switch(does_not_intersect, background,
@@ -111,7 +113,8 @@ def similarity_cost2(observed_img, nprims, width, height):
     shape_params = T.matrix('shape')
     fragCoords = T.tensor3()
     res, updates = symbolic_render(nprims, shape_params, fragCoords, width, height)
-    cost = T.sum(T.sqrt((res - observed_img)**2))
+    eps = 1e-9
+    cost = T.sum(T.maximum(eps, (res - observed_img)**2))
     cost_grad = T.grad(cost, shape_params)
     cost_compiled = function([fragCoords, shape_params], [res, cost, cost_grad], updates=updates, mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True))
     return cost_compiled
