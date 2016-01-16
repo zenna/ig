@@ -47,6 +47,7 @@ def vgg_features(img):
 
     lasagne.layers.set_all_param_values(output_layer, model['values'])
     params = lasagne.layers.get_all_params(output_layer)
+    inp_th = lasagne.layers.get_output(net['input'])
     conv1_th = lasagne.layers.get_output(net['conv1'])
     norm1_th = lasagne.layers.get_output(net['norm1'])
     pool1_th = lasagne.layers.get_output(net['pool1'])
@@ -62,7 +63,7 @@ def vgg_features(img):
     output_layer_th = lasagne.layers.get_output(output_layer)
     #return (conv1_th, norm1_th, pool1_th, conv2_th, pool2_th, conv3_th, conv4_th,
     #        conv5_th, pool5_th, fc6_th, drop6_th, fc7_th, output_layer_th)
-    return (conv1_th, norm1_th, pool1_th, conv2_th, pool2_th, conv3_th, conv4_th,
+    return (inp_th, conv1_th, norm1_th, pool1_th, conv2_th, pool2_th, conv3_th, conv4_th,
             conv5_th, pool5_th)
 
 def gen_vgg():
@@ -72,7 +73,7 @@ def gen_vgg():
     return function([inp_img], output)
 
 def feature_compare(features, observed_features):
-    return T.sum((features[8] - observed_features[8])**2)
-    # dists = [(features[i] - observed_features[i])**2 for i in range(len(features))]
-    # summed_dists = [T.sum(dist) for dist in dists]
-    # return sum(summed_dists)
+    # return T.sum((features[8] - observed_features[8])**2)
+    dists = [(features[i] - observed_features[i])**2 for i in range(1)]
+    summed_dists = [T.sum(dist) for dist in dists]
+    return sum(summed_dists)
