@@ -74,6 +74,7 @@ def gen_vgg():
 
 def feature_compare(features, observed_features):
     # return T.sum((features[8] - observed_features[8])**2)
-    dists = [(features[i] - observed_features[i])**2 for i in range(1)]
+    eps = 1e-9
+    dists = [T.maximum(eps, (features[i] - observed_features[i])**2) for i in range(1)]
     summed_dists = [T.sum(dist) for dist in dists]
     return sum(summed_dists)
