@@ -73,7 +73,7 @@ def cost_func(x, grad):
     obj_cost = cost(exfragcoords, reshaped_shapes)
     print obj_cost[1]
     np.save('data/proposal' + str(i), obj_cost[0], allow_pickle=True, fix_imports=True)
-    # grad[:] = obj_cost[2].flatten()
+    grad[:] = obj_cost[2].flatten()
     i = i + 1
     return float(obj_cost[1])
 
