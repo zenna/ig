@@ -11,7 +11,7 @@ curr_mode = None
 #curr_mode = NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
 
 ## THe function will take as input
-theano.config.optimizer = 'None'
+# theano.config.optimizer = 'None'
 def mindist(translate, radii, min_so_far, ro, rd, background):
     ro = ro + translate
     d_o = T.dot(rd, ro)     # 640, 480
