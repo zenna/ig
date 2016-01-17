@@ -57,7 +57,7 @@ theano_cost_func = similarity_cost(observed_features, nprims, width, height)
 print("Evaluating Cost and Gradient")
 
 # Generate new shapes
-from theano.optimize import mk_cost_func, optimize
+from ig.optimize import mk_cost_func, optimize
 init_shapes = genshapes(nprims)
 theano_cost = theano_cost_func(exfragcoords, shapes)
 

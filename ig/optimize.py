@@ -1,6 +1,3 @@
-import pylab
-import matplotlib.pyplot as plt
-from PIL import Image
 import numpy as np
 import nlopt
 
@@ -32,6 +29,11 @@ def optimize(init_state, cost_func):
     # print "optimum at ", x[0],x[1]
     print "minimum value = ", minf
     # print "result code = ", opt.last_optimize_result()
+
+
+# import pylab
+# import matplotlib.pyplot as plt
+# from PIL import Image
 
 #
 # img = np.load('/home/zenna/data/observed_img.npy')
