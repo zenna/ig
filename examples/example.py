@@ -26,10 +26,9 @@ width = 224
 height = 224
 # Generate initial rays
 exfragcoords = gen_fragcoords(width, height)
-nprims = 500
+nprims = 10
 print("Compiling Renderer")
 render = make_render(nprims, width, height)
-
 shapes = genshapes(nprims)
 print("Rendering")
 img = render(exfragcoords, shapes)
@@ -54,36 +53,14 @@ observed_features = vgg_network(img_tiled)
 
 # similarity_cost
 print("Compiling Cost Function")
-cost = similarity_cost(observed_features, nprims, width, height)
+theano_cost_func = similarity_cost(observed_features, nprims, width, height)
 print("Evaluating Cost and Gradient")
 
 # Generate new shapes
-shapes = genshapes(nprims)
-sim2 = cost(exfragcoords, shapes)
-print(sim2)
+from theano.optimize import mk_cost_func, optimize
+init_shapes = genshapes(nprims)
+theano_cost = theano_cost_func(exfragcoords, shapes)
 
-import nlopt
 print("Doing Pyton Optimisation")
-
-i = 0
-def cost_func(x, grad):
-    global i
-    reshaped_shapes = np.reshape(x, shapes.shape)
-    reshaped_shapes = np.array(reshaped_shapes, dtype='float32')
-    obj_cost = cost(exfragcoords, reshaped_shapes)
-    print obj_cost[1]
-    np.save('data/proposal' + str(i), obj_cost[0], allow_pickle=True, fix_imports=True)
-    grad[:] = obj_cost[2].flatten()
-    i = i + 1
-    return float(obj_cost[1])
-
-init_shapes = shapes.flatten()
-nparams = shapes.size
-opt = nlopt.opt(nlopt.LD_MMA, nparams)
-opt.set_min_objective(cost_func)
-opt.set_xtol_rel(1e-4)
-x = opt.optimize(init_shapes)
-minf = opt.last_optimum_value()
-# print "optimum at ", x[0],x[1]
-print "minimum value = ", minf
-# print "result code = ", opt.last_optimize_result()
+cost_func = mk_cost_func(theano_cost)
+optimize(init_shapes)

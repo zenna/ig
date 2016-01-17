@@ -11,7 +11,7 @@ curr_mode = None
 #curr_mode = NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
 
 ## THe function will take as input
-# theano.config.optimizer = 'None'
+theano.config.optimizer = 'None'
 def mindist(translate, radii, min_so_far, ro, rd, background):
     ro = ro + translate
     d_o = T.dot(rd, ro)     # 640, 480
@@ -69,7 +69,6 @@ def symbolic_render(nprims, shape_params, fragCoords, width, height):
     """Symbolically render rays starting with fragCoords according to geometry
         defined by shape_params"""
     iResolution = np.array([width, height], dtype=config.floatX)
-    cat = T.matrix()
     q = fragCoords / iResolution
     p = -1.0 + 2.0 * q
     p2 = p * np.array([iResolution[0]/iResolution[1],1.0], dtype=config.floatX)
@@ -90,7 +89,7 @@ def symbolic_render(nprims, shape_params, fragCoords, width, height):
 
 def make_render(nprims, width, height):
     shape_params = T.matrix('shape')
-    fragCoords = T.tensor3()
+    fragCoords = T.tensor3('fragCoords')
     res, updates = symbolic_render(nprims, shape_params, fragCoords, width, height)
     render = function([fragCoords, shape_params], res, updates=updates, mode=curr_mode)
     return render
