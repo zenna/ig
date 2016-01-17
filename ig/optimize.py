@@ -29,19 +29,3 @@ def optimize(init_state, cost_func):
     # print "optimum at ", x[0],x[1]
     print "minimum value = ", minf
     # print "result code = ", opt.last_optimize_result()
-
-
-# import pylab
-# import matplotlib.pyplot as plt
-# from PIL import Image
-
-#
-# img = np.load('/home/zenna/data/observed_img.npy')
-# plt.figure()
-# plt.imshow(img)
-# plt.savefig('/home/zenna/data/observed_img.png')
-#
-# for i in range(10):
-#     plt.figure()
-#     plt.imshow(np.load('/home/zenna/data/proposal' + str(i) + '.npy'))
-#     plt.savefig('/home/zenna/data/proposal' + str(i) + '.png')

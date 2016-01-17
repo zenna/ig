@@ -26,7 +26,7 @@ width = 224
 height = 224
 # Generate initial rays
 exfragcoords = gen_fragcoords(width, height)
-nprims = 10
+nprims = 1
 print("Compiling Renderer")
 render = make_render(nprims, width, height)
 shapes = genshapes(nprims)
@@ -62,5 +62,5 @@ init_shapes = genshapes(nprims)
 theano_cost = theano_cost_func(exfragcoords, shapes)
 
 print("Doing Pyton Optimisation")
-cost_func = mk_cost_func(theano_cost, exfragcoords, init_shapes.shape)
+cost_func = mk_cost_func(theano_cost_func, exfragcoords, init_shapes.shape)
 optimize(init_shapes, cost_func)

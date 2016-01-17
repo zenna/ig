@@ -102,9 +102,10 @@ def similarity_cost(observed_features, nprims, width, height):
     res, updates = symbolic_render(nprims, shape_params, fragCoords, width, height)
     res_tiled = T.tile(res,(1,3,1,1))
     proposal_features = vgg_features(res_tiled)
-    cost = feature_compare(proposal_features,shared_observed_features)
+    summed_dists = feature_compare(proposal_features,shared_observed_features)
+    cost = sum(summed_dists)
     cost_grad = T.grad(cost, shape_params)
-    cost_compiled = function([fragCoords, shape_params], [res, cost, cost_grad], updates=updates, mode=curr_mode)
+    cost_compiled = function([fragCoords, shape_params], [res, cost, cost_grad] + summed_dists, updates=updates, mode=curr_mode)
     return cost_compiled
 
 # This generates a d

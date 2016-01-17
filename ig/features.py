@@ -78,4 +78,4 @@ def feature_compare(features, observed_features):
     nfeatures = 6
     dists = [T.maximum(eps, (features[i] - observed_features[i])**2) for i in range(nfeatures)]
     summed_dists = [T.sum(dists[i])/observed_features[i].size for dist in range(nfeatures)]
-    return sum(summed_dists)
+    return summed_dists
