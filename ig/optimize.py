@@ -2,10 +2,10 @@ import numpy as np
 import nlopt
 
 optim_iter = 0
-def mk_cost_func(theano_cost_func):
+def mk_cost_func(theano_cost_func, exfragcoords, params_shape):
     def cost_func(x, grad):
         global optim_iter
-        reshaped_shapes = np.reshape(x, shapes.shape)
+        reshaped_shapes = np.reshape(x, params_shape)
         reshaped_shapes = np.array(reshaped_shapes, dtype='float32')
         obj_cost = theano_cost_func(exfragcoords, reshaped_shapes)
         print obj_cost[1]

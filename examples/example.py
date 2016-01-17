@@ -62,5 +62,5 @@ init_shapes = genshapes(nprims)
 theano_cost = theano_cost_func(exfragcoords, shapes)
 
 print("Doing Pyton Optimisation")
-cost_func = mk_cost_func(theano_cost)
-optimize(init_shapes)
+cost_func = mk_cost_func(theano_cost, exfragcoords, init_shapes.shape)
+optimize(init_shapes, cost_func)
