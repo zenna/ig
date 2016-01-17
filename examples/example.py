@@ -26,7 +26,7 @@ width = 224
 height = 224
 # Generate initial rays
 exfragcoords = gen_fragcoords(width, height)
-nprims = 1
+nprims = 10
 print("Compiling Renderer")
 render = make_render(nprims, width, height)
 shapes = genshapes(nprims)
