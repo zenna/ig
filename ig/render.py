@@ -15,7 +15,7 @@ def dotty(x,y,axis):
 
 ## THe function will take as input
 # theano.config.optimizer = 'None'
-def mindist(translate, radii, min_so_far, ro, rd):
+def mindist(translate, min_so_far, ro, rd):
     # ro: 3
     # transalate: nbatch * 3
     # min_so_far: nbatch * width * height
