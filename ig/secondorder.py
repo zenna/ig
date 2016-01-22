@@ -47,6 +47,7 @@ def second_order(nprims = 200, nbatch = 50):
     """
     width = 224
     height = 224
+    params_per_prim = 4
     nshape_params = nprims * params_per_prim
 
     img = T.tensor4("input image")
