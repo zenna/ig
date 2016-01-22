@@ -18,6 +18,10 @@ import numpy as np
 from ig.render import symbolic_render, make_render, gen_fragcoords
 import pickle
 
+# Config
+config.scan.allow_output_prealloc = False
+config.optimizer = 'None'
+
 curr_mode = None
 
 def go():
@@ -46,7 +50,7 @@ def second_order(num_epochs = 500):
 
     nprims = 200
     params_per_prim = 4
-    nbatch = 4
+    nbatch = 50
     nshape_params = nprims * params_per_prim
 
     img = T.tensor4("input image")
@@ -77,6 +81,7 @@ def second_order(num_epochs = 500):
 
     # Simply using pixel distance
     eps = 1e-9
+
     loss = T.sum(T.maximum(eps, (res_reshape - img)**2))
 
     # Create update expressions for training, i.e., how to modify the
@@ -91,6 +96,8 @@ def second_order(num_epochs = 500):
         scan_updates[k] = network_updates[k]
 
     print("Compiling Loss Function")
+    # grad = T.grad(loss, params[0])
+    # netcost = function([fragCoords, img], [loss, grad, res_reshape], updates=scan_updates, mode=curr_mode)
     netcost = function([fragCoords, img], loss, updates=scan_updates, mode=curr_mode)
 
     ## Generate Render Function to make data

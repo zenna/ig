@@ -43,12 +43,14 @@ def mindist(translate, radii, min_so_far, ro, rd):
 
 def mapedit(ro, rd, params, nprims, width, height):
     # Translate ray origin by the necessary parameters
+    nbatch = 50
     translate_params = params[:,:, 0:3]
     sphere_radii = params[:,:, 3]
 
     # background = np.full((width, height, params.shape[0]), background_dist, dtype=config.floatX)(width, height, params.shape[0])
     background_dist = np.array(10,dtype=config.floatX)
-    init_depth = T.alloc(background_dist, width, height, params.shape[1])
+    init_depth = shared(np.array(np.full(background_dist, width, height, nbatch), dtype=config.floatX))
+    # init_depth = T.alloc(background_dist, width, height, params.shape[1])
     results, updates = theano.scan(mindist, outputs_info=init_depth, sequences=[translate_params, sphere_radii], non_sequences = [ro, rd])
     return results[-1], updates
 
