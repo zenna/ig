@@ -127,7 +127,7 @@ def network_mb(network):
     return (float(len(q))*32) / 1024.0**2
 
 nprims = 200
-nbatch = 50
+nbatch = 30
 render, netcost, network = second_order(nprims = nprims, nbatch = nbatch)
 print "Weights in MB"
 print network_mb(network)
