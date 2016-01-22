@@ -95,7 +95,7 @@ def second_order(nprims = 200, nbatch = 50):
         scan_updates[k] = network_updates[k]
 
     print("Compiling Loss Function")
-    # grad = T.grad(loss, params[0])
+    grad = T.grad(loss, params[0])
     netcost = function([fragCoords, img], [loss, grad, res_reshape], updates=scan_updates, mode=curr_mode)
     # netcost = function([fragCoords, img], loss, updates=scan_updates, mode=curr_mode)
 
