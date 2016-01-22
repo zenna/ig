@@ -43,7 +43,7 @@ def mindist(translate, radii, min_so_far, ro, rd):
 
 def mapedit(ro, rd, params, nprims, width, height):
     # Translate ray origin by the necessary parameters
-    nbatch = 30
+    nbatch = 20
     translate_params = params[:,:, 0:3]
     sphere_radii = params[:,:, 3]
 
