@@ -50,8 +50,8 @@ def mapedit(ro, rd, params, nprims, width, height):
 
     # background = np.full((width, height, params.shape[0]), background_dist, dtype=config.floatX)(width, height, params.shape[0])
     background_dist = np.array(10,dtype=config.floatX)
-    init_depth = shared(np.full((width, height, nbatch), background_dist, dtype=config.floatX))
-    # init_depth = T.alloc(background_dist, width, height, params.shape[1])
+    # init_depth = shared(np.full((width, height, nbatch), background_dist, dtype=config.floatX))
+    init_depth = T.alloc(background_dist, width, height, params.shape[1])
     results, updates = theano.scan(mindist, outputs_info=init_depth, sequences=[translate_params], non_sequences = [ro, rd], n_steps = nprims)
     return results[-1], updates
 

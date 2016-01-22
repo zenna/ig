@@ -81,13 +81,14 @@ def second_order(nprims = 200, nbatch = 50):
     # Simply using pixel distance
     eps = 1e-9
 
-    loss = T.sum(T.maximum(eps, (res_reshape - img)**2)) / (224*224)
+    diff = T.maximum(eps, (res_reshape - img)**2)
+    loss = T.sum(diff) / (224*224)
 
     # Create update expressions for training, i.e., how to modify the
     # parameters at each training step. Here, we'll use Stochastic Gradient
     # Descent (SGD) with Nesterov momentum, but Lasagne offers plenty more.
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
-    network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.001, momentum=0.09)
+    network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
 
     ## Merge Updates
     for k in network_updates.keys():
@@ -96,7 +97,7 @@ def second_order(nprims = 200, nbatch = 50):
 
     print("Compiling Loss Function")
     grad = T.grad(loss, params[0])
-    netcost = function([fragCoords, img], [loss, grad, res_reshape, shape_params], updates=scan_updates, mode=curr_mode)
+    netcost = function([fragCoords, img], [loss, grad, res_reshape, shape_params, diff], updates=scan_updates, mode=curr_mode)
     # netcost = function([fragCoords, img], loss, updates=scan_updates, mode=curr_mode)
 
     ## Generate Render Function to make data
@@ -106,6 +107,7 @@ def second_order(nprims = 200, nbatch = 50):
     render = make_render(nprims, width, height)
     return render, netcost, output_layer
 
+# import ig.display
 def train(network, nprims = 200, nbatch = 50, num_epochs = 500):
     width = 224
     height = 224
@@ -115,10 +117,13 @@ def train(network, nprims = 200, nbatch = 50, num_epochs = 500):
         rand_data = genshapebatch(nprims, nbatch)
         print("Rendering Test Data")
         test_data = render(exfragcoords, rand_data)
+        test_data = np.transpose(test_data, (2,0,1))
+        reshaped_test_data = np.reshape(test_data, (nbatch,1,width, height))
         print("Computing Loss")
-        test_err = netcost(exfragcoords, np.reshape(test_data, (nbatch,1,width, height)))
+        test_err = netcost(exfragcoords, reshaped_test_data)
         print(test_err[3])
         print(test_err[0])
+        # ig.display.draw(test_err[4][0,0])
         # print("  test loss:\t\t\t{:.6f}".format(test_err))
 
     return lasagne.layers.get_all_param_values(network)
@@ -129,8 +134,8 @@ def network_mb(network):
     return (float(len(q))*32) / 1024.0**2
 
 nprims = 200
-nbatch = 10
+nbatch = 20
 render, netcost, network = second_order(nprims = nprims, nbatch = nbatch)
-print "Weights in MB"
-print network_mb(network)
+# print "Weights in MB"
+# print network_mb(network)
 train(network, nprims = nprims, nbatch = nbatch)

@@ -3,9 +3,12 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
 
+plt.ion()
+
 def draw(img):
+    plt.figure()
     plt.imshow(img)
-    plt.show()
+    plt.draw()
 
 def topng(fname):
     img = np.load(fname + '.npy')
