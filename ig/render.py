@@ -44,8 +44,9 @@ def mindist(translate, radii, min_so_far, ro, rd):
 def mapedit(ro, rd, params, nprims, width, height):
     # Translate ray origin by the necessary parameters
     nbatch = 10
-    translate_params = params[:,:, 0:3]
-    sphere_radii = params[:,:, 3]
+    translate_params = params
+    # translate_params = params[:,:, 0:3]
+    # sphere_radii = params[:,:, 3]
 
     # background = np.full((width, height, params.shape[0]), background_dist, dtype=config.floatX)(width, height, params.shape[0])
     background_dist = np.array(10,dtype=config.floatX)

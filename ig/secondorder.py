@@ -38,7 +38,7 @@ def genshapes(nprims):
     return np.array(shapes, dtype=config.floatX)
 
 def genshapebatch(nprims, nbatch):
-    shapes = np.random.rand(nprims, nbatch, 4)*2 - 2
+    shapes = np.random.rand(nprims, nbatch, 3)*2 - 2
     return np.array(shapes, dtype=config.floatX)
 
 def second_order(nprims = 200, nbatch = 50):
@@ -48,7 +48,7 @@ def second_order(nprims = 200, nbatch = 50):
     """
     width = 224
     height = 224
-    params_per_prim = 4
+    params_per_prim = 3
     nshape_params = nprims * params_per_prim
 
     img = T.tensor4("input image")
@@ -117,7 +117,7 @@ def train(network, nprims = 200, nbatch = 50, num_epochs = 500):
         test_data = render(exfragcoords, rand_data)
         print("Computing Loss")
         test_err = netcost(exfragcoords, np.reshape(test_data, (nbatch,1,width, height)))
-        print(test_err)
+        print(test_err[0])
         # print("  test loss:\t\t\t{:.6f}".format(test_err))
 
     return lasagne.layers.get_all_param_values(network)
