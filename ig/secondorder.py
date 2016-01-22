@@ -62,10 +62,10 @@ def second_order(nprims = 200, nbatch = 50):
     net['conv4'] = ConvLayer(net['conv3'], num_filters=512, filter_size=3, pad=1)
     net['conv5'] = ConvLayer(net['conv4'], num_filters=512, filter_size=3, pad=1)
     net['pool5'] = PoolLayer(net['conv5'], pool_size=3, stride=3, ignore_border=False)
-    net['fc6'] = DenseLayer(net['pool5'], num_units=4096)
-    net['drop6'] = DropoutLayer(net['fc6'], p=0.5)
-    net['fc7'] = DenseLayer(net['drop6'], num_units=nshape_params, nonlinearity=lasagne.nonlinearities.sigmoid)
-    # net['fc7'] = DenseLayer(net['conv5'], num_units=nshape_params, nonlinearity=lasagne.nonlinearities.sigmoid)
+    # net['fc6'] = DenseLayer(net['pool5'], num_units=4096)
+    # net['drop6'] = DropoutLayer(net['fc6'], p=0.5)
+    # net['fc7'] = DenseLayer(net['drop6'], num_units=nshape_params, nonlinearity=lasagne.nonlinearities.sigmoid)
+    net['fc7'] = DenseLayer(net['pool5'], num_units=nshape_params, nonlinearity=lasagne.nonlinearities.sigmoid)
     output_layer = net['fc7']
     output = lasagne.layers.get_output(output_layer)
     scaled_output = output * 2 - 2
@@ -129,4 +129,6 @@ def network_mb(network):
 nprims = 200
 nbatch = 50
 render, netcost, network = second_order(nprims = nprims, nbatch = nbatch)
+print "Weights in MB"
+print network_mb(network)
 train(network, nprims = nprims, nbatch = nbatch)
