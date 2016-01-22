@@ -105,6 +105,9 @@ def second_order(nprims = 200, nbatch = 50):
     return render, netcost, output
 
 def train(network, nprims = 200, nbatch = 50, num_epochs = 500):
+    width = 224
+    height = 224
+    exfragcoords = gen_fragcoords(width, height)
     print("Starting Training")
     for epoch in range(num_epochs):
         rand_data = genshapebatch(nprims, nbatch)
