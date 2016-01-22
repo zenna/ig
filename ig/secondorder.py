@@ -81,7 +81,7 @@ def second_order(nprims = 200, nbatch = 50):
     # Simply using pixel distance
     eps = 1e-9
 
-    loss = T.sum(T.maximum(eps, (res_reshape - img)**2))
+    loss = T.sum(T.maximum(eps, (res_reshape - img)**2)) / (224*224)
 
     # Create update expressions for training, i.e., how to modify the
     # parameters at each training step. Here, we'll use Stochastic Gradient
@@ -118,6 +118,7 @@ def train(network, nprims = 200, nbatch = 50, num_epochs = 500):
         print("Computing Loss")
         test_err = netcost(exfragcoords, np.reshape(test_data, (nbatch,1,width, height)))
         print(test_err[0])
+        print(test_err[3])
         # print("  test loss:\t\t\t{:.6f}".format(test_err))
 
     return lasagne.layers.get_all_param_values(network)
