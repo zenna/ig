@@ -40,17 +40,13 @@ def genshapebatch(nprims, nbatch):
     shapes = np.random.rand(nprims, nbatch, 4)*2 - 2
     return np.array(shapes, dtype=config.floatX)
 
-def second_order(num_epochs = 500):
+def second_order(nprims = 200, nbatch = 50):
     """Creates a network which takes as input a image and returns a cost.
     Network extracts features of image to create shape params which are rendered.
     The similarity between the rendered image and the actual image is the cost
     """
     width = 224
     height = 224
-
-    nprims = 200
-    params_per_prim = 4
-    nbatch = 50
     nshape_params = nprims * params_per_prim
 
     img = T.tensor4("input image")
@@ -105,7 +101,9 @@ def second_order(num_epochs = 500):
     exfragcoords = gen_fragcoords(width, height)
     print("Compiling Renderer")
     render = make_render(nprims, width, height)
+    return render, netcost, output
 
+def train(network, nprims = 200, nbatch = 50, num_epochs = 500):
     print("Starting Training")
     for epoch in range(num_epochs):
         rand_data = genshapebatch(nprims, nbatch)
@@ -116,6 +114,7 @@ def second_order(num_epochs = 500):
         print(test_err)
         # print("  test loss:\t\t\t{:.6f}".format(test_err))
 
-    return params
+    return lasagne.layers.get_all_param_values(network)
 
-params = second_order()
+render, netcost, network = second_order(nprims = nprims, nbatch = 50)
+train(network, nprims = nprims, nbatch = nbatch)
