@@ -52,7 +52,7 @@ def mapedit(ro, rd, params, nprims, width, height):
     background_dist = np.array(10,dtype=config.floatX)
     init_depth = shared(np.full((width, height, nbatch), background_dist, dtype=config.floatX))
     # init_depth = T.alloc(background_dist, width, height, params.shape[1])
-    results, updates = theano.scan(mindist, outputs_info=init_depth, sequences=[translate_params, sphere_radii], non_sequences = [ro, rd], n_steps = nprims)
+    results, updates = theano.scan(mindist, outputs_info=init_depth, sequences=[translate_params], non_sequences = [ro, rd], n_steps = nprims)
     return results[-1], updates
 
 def castray(ro, rd, shape_params, nprims, width, height):
