@@ -1,5 +1,5 @@
 from theano import tensor as T
-from theano import function, config, shared
+from theano import function, config, shared, printing
 import numpy as np
 import theano
 import numpy
@@ -10,35 +10,46 @@ from theano.compile.nanguardmode import NanGuardMode
 curr_mode = None
 #curr_mode = NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
 
+def dotty(x,y,axis):
+    return T.sum(x * y,axis=axis)
+
 ## THe function will take as input
 # theano.config.optimizer = 'None'
-def mindist(translate, radii, min_so_far, ro, rd, background):
+def mindist(translate, radii, min_so_far, ro, rd):
+    # ro: 3
+    # transalate: nbatch * 3
+    # min_so_far: nbatch * width * height
+    # rd: width * height * 3
     ro = ro + translate
-    d_o = T.dot(rd, ro)     # 640, 480
-    o_o = T.dot(ro, ro)   # scalar
+    # d_o = T.dot(rd, ro)   # 640, 480
+    # d_o = dotty(rd, ro, axis=1)
+    d_o = T.tensordot(rd, ro, axes=[2,1])
+    o_o =  T.sum(ro**2,axis=1)
     b = 2*d_o
-    c = o_o - radii**2 #FIXME, remove this squaring
+    c = o_o - 0.001 #FIXME, remove this squaring
     inner = b **2 - 4 * c   # 640 480
     does_not_intersect = inner < 0.0
     minus_b = -b
     # sqrt_inner = T.sqrt(T.maximum(0.0001, inner))
     eps = 1e-9
+    background_dist = 10.0
     sqrt_inner = T.sqrt(T.maximum(eps, inner))
     root1 = (minus_b - sqrt_inner)/2.0
     root2 = (minus_b + sqrt_inner)/2.0
-    depth = T.switch(does_not_intersect, background,
+    depth = T.switch(does_not_intersect, background_dist,
                         T.switch(root1 > 0, root1,
-                        T.switch(root2 > 0, root2, background)))
+                        T.switch(root2 > 0, root2, background_dist)))
     return T.min([min_so_far, depth], axis=0)
 
 def mapedit(ro, rd, params, nprims, width, height):
     # Translate ray origin by the necessary parameters
-    translate_params = params[:, 0:3]
-    sphere_radii = params[:, 3]
-    background_dist = 10
-    background = np.full((width, height), background_dist, dtype=config.floatX)
-    init_depth = shared(background)
-    results, updates = theano.scan(mindist, outputs_info=init_depth, sequences=[translate_params, sphere_radii], non_sequences = [ro, rd, init_depth])
+    translate_params = params[:,:, 0:3]
+    sphere_radii = params[:,:, 3]
+
+    # background = np.full((width, height, params.shape[0]), background_dist, dtype=config.floatX)(width, height, params.shape[0])
+    background_dist = np.array(10,dtype=config.floatX)
+    init_depth = T.alloc(background_dist, width, height, params.shape[1])
+    results, updates = theano.scan(mindist, outputs_info=init_depth, sequences=[translate_params, sphere_radii], non_sequences = [ro, rd])
     return results[-1], updates
 
 def castray(ro, rd, shape_params, nprims, width, height):
@@ -88,7 +99,7 @@ def symbolic_render(nprims, shape_params, fragCoords, width, height):
     return renderrays(ro, rd, shape_params, nprims, width, height)
 
 def make_render(nprims, width, height):
-    shape_params = T.matrix('shape')
+    shape_params = T.tensor3('shape')
     fragCoords = T.tensor3('fragCoords')
     res, updates = symbolic_render(nprims, shape_params, fragCoords, width, height)
     render = function([fragCoords, shape_params], res, updates=updates, mode=curr_mode)
