@@ -20,7 +20,7 @@ import pickle
 
 # Config
 config.scan.allow_output_prealloc = False
-config.optimizer = 'None'
+# config.optimizer = 'None'
 config.exception_verbosity='high'
 
 curr_mode = None
