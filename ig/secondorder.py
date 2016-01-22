@@ -69,7 +69,7 @@ def second_order(nprims = 200, nbatch = 50):
     net['fc7'] = DenseLayer(net['pool5'], num_units=nshape_params)
     output_layer = net['fc7']
     output = lasagne.layers.get_output(output_layer)
-    scaled_output = output * 2 - 2
+    scaled_output = output * 4 - 2
 
     ## Render these parameters
     shape_params = T.reshape(scaled_output, (nprims, nbatch, params_per_prim))
