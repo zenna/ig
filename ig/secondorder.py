@@ -66,10 +66,10 @@ def second_order(nprims = 200, nbatch = 50):
     net['fc6'] = DenseLayer(net['pool5'], num_units=4096)
     net['drop6'] = DropoutLayer(net['fc6'], p=0.5)
     # net['fc7'] = DenseLayer(net['drop6'], num_units=nshape_params, nonlinearity=lasagne.nonlinearities.sigmoid)
-    net['fc7'] = DenseLayer(net['pool5'], num_units=nshape_params)
+    net['fc7'] = DenseLayer(net['pool5'], num_units=nshape_params, nonlinearity=lasagne.nonlinearities.tanh)
     output_layer = net['fc7']
     output = lasagne.layers.get_output(output_layer)
-    scaled_output = output * 4 - 2
+    scaled_output = output - 1
 
     ## Render these parameters
     shape_params = T.reshape(scaled_output, (nprims, nbatch, params_per_prim))
