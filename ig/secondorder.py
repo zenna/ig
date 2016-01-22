@@ -116,5 +116,6 @@ def train(network, nprims = 200, nbatch = 50, num_epochs = 500):
 
     return lasagne.layers.get_all_param_values(network)
 
-render, netcost, network = second_order(nprims = nprims, nbatch = 50)
+nprims = 200, nbatch = 50
+render, netcost, network = second_order(nprims = nprims, nbatch = nbatch)
 train(network, nprims = nprims, nbatch = nbatch)
