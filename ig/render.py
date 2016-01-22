@@ -16,31 +16,30 @@ def dotty(x,y,axis):
 ## THe function will take as input
 # theano.config.optimizer = 'None'
 def mindist(translate, radii, min_so_far, ro, rd):
-    return min_so_far + T.sum(translate)
-    # # ro: 3
-    # # transalate: nbatch * 3
-    # # min_so_far: nbatch * width * height
-    # # rd: width * height * 3
-    # ro = ro + translate
-    # # d_o = T.dot(rd, ro)   # 640, 480
-    # # d_o = dotty(rd, ro, axis=1)
-    # d_o = T.tensordot(rd, ro, axes=[2,1])
-    # o_o =  T.sum(ro**2,axis=1)
-    # b = 2*d_o
-    # c = o_o - 0.001 #FIXME, remove this squaring
-    # inner = b **2 - 4 * c   # 640 480
-    # does_not_intersect = inner < 0.0
-    # minus_b = -b
-    # # sqrt_inner = T.sqrt(T.maximum(0.0001, inner))
-    # eps = 1e-9
-    # background_dist = 10.0
-    # sqrt_inner = T.sqrt(T.maximum(eps, inner))
-    # root1 = (minus_b - sqrt_inner)/2.0
-    # root2 = (minus_b + sqrt_inner)/2.0
-    # depth = T.switch(does_not_intersect, background_dist,
-    #                     T.switch(root1 > 0, root1,
-    #                     T.switch(root2 > 0, root2, background_dist)))
-    # return T.min([min_so_far, depth], axis=0)
+    # ro: 3
+    # transalate: nbatch * 3
+    # min_so_far: nbatch * width * height
+    # rd: width * height * 3
+    ro = ro + translate
+    # d_o = T.dot(rd, ro)   # 640, 480
+    # d_o = dotty(rd, ro, axis=1)
+    d_o = T.tensordot(rd, ro, axes=[2,1])
+    o_o =  T.sum(ro**2,axis=1)
+    b = 2*d_o
+    c = o_o - 0.001 #FIXME, remove this squaring
+    inner = b **2 - 4 * c   # 640 480
+    does_not_intersect = inner < 0.0
+    minus_b = -b
+    # sqrt_inner = T.sqrt(T.maximum(0.0001, inner))
+    eps = 1e-9
+    background_dist = 10.0
+    sqrt_inner = T.sqrt(T.maximum(eps, inner))
+    root1 = (minus_b - sqrt_inner)/2.0
+    root2 = (minus_b + sqrt_inner)/2.0
+    depth = T.switch(does_not_intersect, background_dist,
+                        T.switch(root1 > 0, root1,
+                        T.switch(root2 > 0, root2, background_dist)))
+    return T.min([min_so_far, depth], axis=0)
 
 def mapedit(ro, rd, params, nprims, width, height):
     # Translate ray origin by the necessary parameters
