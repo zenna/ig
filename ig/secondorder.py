@@ -22,6 +22,7 @@ import pickle
 config.scan.allow_output_prealloc = False
 config.optimizer = 'None'
 config.exception_verbosity='high'
+config.lib.cnmem = 1.0
 
 curr_mode = None
 
