@@ -33,7 +33,8 @@ def genshapes(nprims):
     return np.array(shapes, dtype=config.floatX)
 
 def genshapebatch(nprims, nbatch):
-    return np.random.rand(nprims, nbatch, 4)*2 - 2
+    shapes = np.random.rand(nprims, nbatch, 4)*2 - 2
+    return np.array(shapes, dtype=config.floatX)
 
 def second_order(num_epochs = 500):
     """Creates a network which takes as input a image and returns a cost.
