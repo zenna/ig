@@ -23,7 +23,8 @@ def genshapes(nprims):
     return np.array(shapes, dtype=config.floatX)
 
 def genshapebatch(nprims, nbatch):
-    return np.random.rand(nprims, nbatch, 4)*2 - 2
+    shapes = np.random.rand(nprims, nbatch, 4)*2 - 2
+    return np.array(shapes, dtype=config.floatX)
 
 width = 224
 height = 224
