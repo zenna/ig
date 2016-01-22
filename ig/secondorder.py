@@ -87,7 +87,7 @@ def second_order(nprims = 200, nbatch = 50):
     # parameters at each training step. Here, we'll use Stochastic Gradient
     # Descent (SGD) with Nesterov momentum, but Lasagne offers plenty more.
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
-    network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
+    network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.001, momentum=0.09)
 
     ## Merge Updates
     for k in network_updates.keys():
@@ -117,8 +117,8 @@ def train(network, nprims = 200, nbatch = 50, num_epochs = 500):
         test_data = render(exfragcoords, rand_data)
         print("Computing Loss")
         test_err = netcost(exfragcoords, np.reshape(test_data, (nbatch,1,width, height)))
-        print(test_err[0])
         print(test_err[3])
+        print(test_err[0])
         # print("  test loss:\t\t\t{:.6f}".format(test_err))
 
     return lasagne.layers.get_all_param_values(network)
@@ -133,4 +133,4 @@ nbatch = 10
 render, netcost, network = second_order(nprims = nprims, nbatch = nbatch)
 print "Weights in MB"
 print network_mb(network)
-#train(network, nprims = nprims, nbatch = nbatch)
+train(network, nprims = nprims, nbatch = nbatch)
