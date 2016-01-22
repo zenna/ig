@@ -96,7 +96,7 @@ def second_order(nprims = 200, nbatch = 50):
 
     print("Compiling Loss Function")
     grad = T.grad(loss, params[0])
-    netcost = function([fragCoords, img], [loss, grad, res_reshape], updates=scan_updates, mode=curr_mode)
+    netcost = function([fragCoords, img], [loss, grad, res_reshape, shape_params], updates=scan_updates, mode=curr_mode)
     # netcost = function([fragCoords, img], loss, updates=scan_updates, mode=curr_mode)
 
     ## Generate Render Function to make data
