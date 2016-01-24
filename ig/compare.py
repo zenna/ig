@@ -113,7 +113,7 @@ def learn_to_move(nprims = 200, nbatch = 50):
     res_reshape2 = res2.dimshuffle([2,'x',0,1])
 
     # unchanged images
-    unchanged_img = res_reshape_split[0,1,:,:]
+    unchanged_img = res_reshape_split[:,1,:,:]
 
     eps = 1e-9
     diff = T.maximum(eps, (unchanged_img - res_reshape2)**2)
@@ -131,7 +131,7 @@ def learn_to_move(nprims = 200, nbatch = 50):
         scan_updates[k] = network_updates[k]
 
     for k in scan_updates2.keys():
-        assert not(scan_updates.has_key(k))
+        # assert not(scan_updates.has_key(k)) #FIXME
         scan_updates[k] = scan_updates2[k]
 
     print("Compiling Loss Function")
@@ -158,7 +158,7 @@ def network_mb(network):
 
 nprims = 100
 nbatch = 4
-network, costfunc = learn_to_move(nprims = nprims, nbatch = nbatch)
+costfunc, network = learn_to_move(nprims = nprims, nbatch = nbatch)
 # print "Weights in MB"
 # print network_mb(network)
 train(network, costfunc, nprims = nprims, nbatch = nbatch)
