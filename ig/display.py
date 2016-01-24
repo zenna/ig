@@ -2,6 +2,7 @@ import pylab
 import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
+import theano.printing
 
 plt.ion()
 
@@ -15,6 +16,9 @@ def topng(fname):
     plt.figure()
     plt.imshow(img)
     plt.savefig(fname + '.png')
+
+def draw_graph(fname):
+    theano.printing.pydotprint(res, outfile=fname, var_with_name_simple=True)
 
 def visoptim(narrays):
     img = np.load('/home/zenna/data/observed_img.npy')
