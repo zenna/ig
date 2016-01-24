@@ -139,14 +139,14 @@ def learn_to_move(nprims = 200, nbatch = 50):
     return netcost, output_layer
 
 # import ig.display
-def train(network, nprims = 200, nbatch = 50, num_epochs = 500):
+def train(network, costfunc, nprims = 200, nbatch = 50, num_epochs = 500):
     width = 224
     height = 224
     exfragcoords = gen_fragcoords(width, height)
     print("Starting Training")
     for epoch in range(num_epochs):
         rand_data = genshapebatch(nprims, nbatch)
-        test_err = netcost(exfragcoords, rand_data)
+        test_err = costfunc(exfragcoords, rand_data)
         print "loss1", test_err
 
     return lasagne.layers.get_all_param_values(network)
@@ -158,7 +158,7 @@ def network_mb(network):
 
 nprims = 100
 nbatch = 4
-render, network = learn_to_move(nprims = nprims, nbatch = nbatch)
+network, costfunc = learn_to_move(nprims = nprims, nbatch = nbatch)
 # print "Weights in MB"
 # print network_mb(network)
-train(network, nprims = nprims, nbatch = nbatch)
+train(network, costfunc, nprims = nprims, nbatch = nbatch)
