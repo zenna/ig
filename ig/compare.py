@@ -95,7 +95,7 @@ def learn_to_move(nprims = 200, nbatch = 50):
     output = lasagne.layers.get_output(output_layer)
 
     #3 First half mvoe
-    learning_rate = 0.1
+    learning_rate = 1.0
     shape_params_split =  T.reshape(shape_params, (nprims, nbatch/2, 2, params_per_prim))
     first_half_params = shape_params_split[:,:,0,:]
     # second_half = res_reshape_split[:,1,:,:]
@@ -105,7 +105,8 @@ def learn_to_move(nprims = 200, nbatch = 50):
     # Have to be careful about splitting to make sure that first half of params are those that render to
     # first channel of each image (and not that they render first half of all images in all channels)
     # shape_params_split = T.reshape(shape_params, (nprims, nbatch/2, 2, 4))
-    delta_shape = T.grad(T.sum(output), shape_params)
+    summed_op = T.sum(output) / nbatch
+    delta_shape = T.grad(summed_op, shape_params)
     delta_shape_split = T.reshape(delta_shape, (nprims, nbatch/2, 2, params_per_prim))
     first_half_delta = delta_shape_split[:,:,0,:]
     new_first_half = first_half_params + learning_rate * -first_half_delta
@@ -137,7 +138,7 @@ def learn_to_move(nprims = 200, nbatch = 50):
         scan_updates[k] = scan_updates2[k]
 
     print("Compiling Loss Function")
-    netcost = function([fragCoords, shape_params], loss, updates=scan_updates, mode=curr_mode)
+    netcost = function([fragCoords, shape_params], [loss, summed_op], updates=scan_updates, mode=curr_mode)
     return netcost, output_layer
 
 # import ig.display
@@ -158,8 +159,8 @@ def network_mb(network):
     q = np.concatenate([pp.flatten() for pp in o])
     return (float(len(q))*32) / 1024.0**2
 
-nprims = 100
-nbatch = 12
+nprims = 50
+nbatch = 24
 costfunc, network = learn_to_move(nprims = nprims, nbatch = nbatch)
 # print "Weights in MB"
 # print network_mb(network)
