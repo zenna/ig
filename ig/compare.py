@@ -70,9 +70,10 @@ def learn_to_move(nprims = 200, nbatch = 50):
     fragCoords = T.tensor3('fragCoords')
     shape_params = T.tensor3("scenes")
     res, scan_updates = symbolic_render(nprims, shape_params, fragCoords, width, height)
+
     res_reshape = res.dimshuffle([2,'x',0,1])
 
-    # Split data set into two
+    # Split batch in half and give each image two channels
     res_reshape_split = T.reshape(res_reshape, (nbatch/2, 2, 224, 224))
 
     # Put the different convnets into two channels
@@ -95,11 +96,9 @@ def learn_to_move(nprims = 200, nbatch = 50):
     output = lasagne.layers.get_output(output_layer)
 
     #3 First half mvoe
-    learning_rate = 1.0
+    learning_rate = 500
     shape_params_split =  T.reshape(shape_params, (nprims, nbatch/2, 2, params_per_prim))
     first_half_params = shape_params_split[:,:,0,:]
-    # second_half = res_reshape_split[:,1,:,:]
-
 
     # Get partial derivatives of half of the.g parameters with respect to the cost and move them
     # Have to be careful about splitting to make sure that first half of params are those that render to
@@ -109,22 +108,23 @@ def learn_to_move(nprims = 200, nbatch = 50):
     delta_shape = T.grad(summed_op, shape_params)
     delta_shape_split = T.reshape(delta_shape, (nprims, nbatch/2, 2, params_per_prim))
     first_half_delta = delta_shape_split[:,:,0,:]
-    new_first_half = first_half_params + learning_rate * -first_half_delta
+    new_first_half = first_half_params - learning_rate * first_half_delta
 
     # Then render this half again to produce new images (width, height, nbatch/2)
     res2, scan_updates2 = symbolic_render(nprims, new_first_half, fragCoords, width, height)
-    res_reshape2 = res2.dimshuffle([2,'x',0,1])
+    res_reshape2 = res2.dimshuffle([2,0,1])
 
     # unchanged images
     unchanged_img = res_reshape_split[:,1,:,:]
+    changed_img = res_reshape_split[:,0,:,:]
 
     eps = 1e-9
     diff = T.maximum(eps, (unchanged_img - res_reshape2)**2)
     loss = T.sum(diff) / (nbatch/2*224*224)
 
-    # Create update expressions for training, i.e., how to modify the
-    # parameters at each training step. Here, we'll use Stochastic Gradient
-    # Descent (SGD) with Nesterov momentum, but Lasagne offers plenty more.
+    diff2 = T.maximum(eps, (changed_img - res_reshape2)**2)
+    loss2 = T.sum(diff2) / (nbatch/2*224*224)
+
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
     network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
 
@@ -137,20 +137,20 @@ def learn_to_move(nprims = 200, nbatch = 50):
         # assert not(scan_updates.has_key(k)) #FIXME
         scan_updates[k] = scan_updates2[k]
 
+    params = lasagne.layers.get_all_params(output_layer)
+    last_layer_params = T.grad(loss, params[-2])
     print("Compiling Loss Function")
-    netcost = function([fragCoords, shape_params], [loss, summed_op], updates=scan_updates, mode=curr_mode)
+    netcost = function([fragCoords, shape_params], [loss, loss2, summed_op, delta_shape, res2, last_layer_params], updates=scan_updates, mode=curr_mode)
     return netcost, output_layer
 
 # import ig.display
-def train(network, costfunc, nprims = 200, nbatch = 50, num_epochs = 500):
-    width = 224
-    height = 224
-    exfragcoords = gen_fragcoords(width, height)
+def train(network, costfunc,  exfragcoords,  nprims = 200, nbatch = 50, num_epochs = 5000, width = 224, height = 224):
     print("Starting Training")
     for epoch in range(num_epochs):
         rand_data = genshapebatch(nprims, nbatch)
         test_err = costfunc(exfragcoords, rand_data)
-        print "loss1", test_err
+        print "loss1", test_err[0]
+        print "loss2", test_err[1]
 
     return lasagne.layers.get_all_param_values(network)
 
@@ -159,9 +159,13 @@ def network_mb(network):
     q = np.concatenate([pp.flatten() for pp in o])
     return (float(len(q))*32) / 1024.0**2
 
+width = 224
+height = 224
+exfragcoords = gen_fragcoords(width, height)
+
 nprims = 50
 nbatch = 24
 costfunc, network = learn_to_move(nprims = nprims, nbatch = nbatch)
 # print "Weights in MB"
 # print network_mb(network)
-train(network, costfunc, nprims = nprims, nbatch = nbatch)
+train(network, costfunc, exfragcoords, nprims = nprims, nbatch = nbatch)

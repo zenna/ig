@@ -153,4 +153,4 @@ nbatch = 4
 render, netcost, network = second_order(nprims = nprims, nbatch = nbatch)
 # print "Weights in MB"
 # print network_mb(network)
-train(network, nprims = nprims, nbatch = nbatch)
+# train(network, nprims = nprims, nbatch = nbatch)
