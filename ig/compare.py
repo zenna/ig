@@ -137,7 +137,7 @@ def learn_to_move(nprims = 200, nbatch = 50):
     loss = loss1 + loss2
 
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
-    network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.1, momentum=0.1)
+    network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.1, momentum=0.01)
 
     ## Merge Updates
     for k in network_updates.keys():
@@ -151,7 +151,7 @@ def learn_to_move(nprims = 200, nbatch = 50):
     params = lasagne.layers.get_all_params(output_layer)
     last_layer_params = T.grad(loss, params[-2])
     print("Compiling Loss Function")
-    netcost = function([fragCoords, shape_params], [loss, loss1, loss2, sumdiff2, summed_op, delta_shape, res2, last_layer_params], updates=scan_updates, mode=curr_mode)
+    netcost = function([fragCoords, shape_params], [loss, loss1, loss2, sumdiff2, summed_op, delta_shape, res2, last_layer_params, unchanged_img, changed_img, res_reshape2], updates=scan_updates, mode=curr_mode)
     return netcost, output_layer
 
 # bashCommand = "mkdir pandoc --template %s.template %s -s -o %s" % (paper, md_string, tex_out)
