@@ -9,6 +9,10 @@
 # We will take the euclidean distance.
 # And get the derivatives of theta with respect to this distance.
 
+import os.path
+import subprocess
+import time
+
 ## Extract features from an image
 import lasagne
 import theano
@@ -121,7 +125,7 @@ def learn_to_move(nprims = 200, nbatch = 50):
     loss1 = T.sum(diff) / (nbatch/2*224*224)
 
     diff2 = T.maximum(eps, (changed_img - res_reshape2)**2)
-    loss2 = T.sum(diff2) / (nbatch/2*224*224)
+    sumdiff2 = T.sum(diff2) / (nbatch/2*224*224)
 
     ## Loss2 is to force change, avoid plateaus
     mu = 0
@@ -129,11 +133,11 @@ def learn_to_move(nprims = 200, nbatch = 50):
     a = 1/(sigma*np.sqrt(2*np.pi))
     b = mu
     c = sigma
-    loss2 = a*T.exp((-loss2**2)/(2*c**2))/40.0
+    loss2 = a*T.exp((-sumdiff2**2)/(2*c**2))/40.0
     loss = loss1 + loss2
 
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
-    network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
+    network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.1, momentum=0.1)
 
     ## Merge Updates
     for k in network_updates.keys():
@@ -147,11 +151,24 @@ def learn_to_move(nprims = 200, nbatch = 50):
     params = lasagne.layers.get_all_params(output_layer)
     last_layer_params = T.grad(loss, params[-2])
     print("Compiling Loss Function")
-    netcost = function([fragCoords, shape_params], [loss, loss1, loss2, summed_op, delta_shape, res2, last_layer_params], updates=scan_updates, mode=curr_mode)
+    netcost = function([fragCoords, shape_params], [loss, loss1, loss2, sumdiff2, summed_op, delta_shape, res2, last_layer_params], updates=scan_updates, mode=curr_mode)
     return netcost, output_layer
 
+# bashCommand = "mkdir pandoc --template %s.template %s -s -o %s" % (paper, md_string, tex_out)
+# print(bashCommand)
+# process = subprocess.Popen(bashCommand.split(), stdout=subprocess.PIPE)
+# output = process.communicate()[0]
+
 # import ig.display
-def train(network, costfunc,  exfragcoords,  nprims = 200, nbatch = 50, num_epochs = 5000, width = 224, height = 224):
+def train(network, costfunc,  exfragcoords,  nprims = 200, nbatch = 50, num_epochs = 5000, width = 224, height = 224, save_data = True):
+    full_dir_name = ""
+    if save_data:
+        datadir = os.environ['DATADIR']
+        newdirname = str(time.time())
+        full_dir_name = os.path.join(datadir, newdirname)
+        print "Making Directory", full_dir_name
+        os.mkdir(full_dir_name)
+
     print("Starting Training")
     for epoch in range(num_epochs):
         rand_data = genshapebatch(nprims, nbatch)
@@ -161,6 +178,10 @@ def train(network, costfunc,  exfragcoords,  nprims = 200, nbatch = 50, num_epoc
         print "loss2", test_err[2]
         print "summed_op", test_err[3]
         print "param grad abs sum", np.sum(np.abs(test_err[-1]))
+        if save_data:
+            fname = "epoch%s" % (epoch)
+            full_fname = os.path.join(full_dir_name, fname)
+            np.savez_compressed(full_fname, *test_err)
 
     return lasagne.layers.get_all_param_values(network)
 
