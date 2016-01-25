@@ -156,8 +156,11 @@ def train(network, costfunc,  exfragcoords,  nprims = 200, nbatch = 50, num_epoc
     for epoch in range(num_epochs):
         rand_data = genshapebatch(nprims, nbatch)
         test_err = costfunc(exfragcoords, rand_data)
-        print "loss1", test_err[0]
-        print "loss2", test_err[1]
+        print "loss", test_err[0]
+        print "loss1", test_err[1]
+        print "loss2", test_err[2]
+        print "summed_op", test_err[3]
+        print "param grad abs sum", np.sum(np.abs(test_err[-1]))
 
     return lasagne.layers.get_all_param_values(network)
 
