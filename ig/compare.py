@@ -58,8 +58,6 @@ def learn_to_move(nprims = 200, nbatch = 50):
     The similarity between the rendered image and the actual image is the cost
     """
 
-
-
     assert nbatch % 2 == 0      # Minibatch must be even in size
     width = 224
     height = 224
@@ -120,10 +118,19 @@ def learn_to_move(nprims = 200, nbatch = 50):
 
     eps = 1e-9
     diff = T.maximum(eps, (unchanged_img - res_reshape2)**2)
-    loss = T.sum(diff) / (nbatch/2*224*224)
+    loss1 = T.sum(diff) / (nbatch/2*224*224)
 
     diff2 = T.maximum(eps, (changed_img - res_reshape2)**2)
     loss2 = T.sum(diff2) / (nbatch/2*224*224)
+
+    ## Loss2 is to force change, avoid plateaus
+    mu = 0
+    sigma = 0.05
+    a = 1/(sigma*np.sqrt(2*np.pi))
+    b = mu
+    c = sigma
+    loss2 = a*T.exp((-loss2**2)/(2*c**2))/40.0
+    loss = loss1 + loss2
 
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
     network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
@@ -140,7 +147,7 @@ def learn_to_move(nprims = 200, nbatch = 50):
     params = lasagne.layers.get_all_params(output_layer)
     last_layer_params = T.grad(loss, params[-2])
     print("Compiling Loss Function")
-    netcost = function([fragCoords, shape_params], [loss, loss2, summed_op, delta_shape, res2, last_layer_params], updates=scan_updates, mode=curr_mode)
+    netcost = function([fragCoords, shape_params], [loss, loss1, loss2, summed_op, delta_shape, res2, last_layer_params], updates=scan_updates, mode=curr_mode)
     return netcost, output_layer
 
 # import ig.display
