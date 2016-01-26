@@ -107,6 +107,7 @@ def learn_to_move(nprims = 200, nbatch = 50):
     # first channel of each image (and not that they render first half of all images in all channels)
     # shape_params_split = T.reshape(shape_params, (nprims, nbatch/2, 2, 4))
     summed_op = T.sum(output) / nbatch
+
     delta_shape = T.grad(summed_op, shape_params)
     delta_shape_split = T.reshape(delta_shape, (nprims, nbatch/2, 2, params_per_prim))
     first_half_delta = delta_shape_split[:,:,0,:]
@@ -137,7 +138,7 @@ def learn_to_move(nprims = 200, nbatch = 50):
     loss = loss1 + loss2
 
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
-    network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.1, momentum=0.01)
+    network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.0)
 
     ## Merge Updates
     for k in network_updates.keys():
