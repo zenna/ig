@@ -138,7 +138,8 @@ def learn_to_move(nprims = 200, nbatch = 50):
     loss = loss1 + loss2
 
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
-    network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.0)
+    # network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.1)
+    network_updates = lasagne.updates.adamax(loss, params)
 
     ## Merge Updates
     for k in network_updates.keys():
@@ -155,11 +156,6 @@ def learn_to_move(nprims = 200, nbatch = 50):
     netcost = function([fragCoords, shape_params], [loss, loss1, loss2, sumdiff2, summed_op, delta_shape, res2, last_layer_params, unchanged_img, changed_img, res_reshape2], updates=scan_updates, mode=curr_mode)
     return netcost, output_layer
 
-# bashCommand = "mkdir pandoc --template %s.template %s -s -o %s" % (paper, md_string, tex_out)
-# print(bashCommand)
-# process = subprocess.Popen(bashCommand.split(), stdout=subprocess.PIPE)
-# output = process.communicate()[0]
-
 # import ig.display
 def train(network, costfunc,  exfragcoords,  nprims = 200, nbatch = 50, num_epochs = 5000, width = 224, height = 224, save_data = True):
     full_dir_name = ""
@@ -174,11 +170,13 @@ def train(network, costfunc,  exfragcoords,  nprims = 200, nbatch = 50, num_epoc
     for epoch in range(num_epochs):
         rand_data = genshapebatch(nprims, nbatch)
         test_err = costfunc(exfragcoords, rand_data)
+        print "epoch", epoch
         print "loss", test_err[0]
         print "loss1", test_err[1]
         print "loss2", test_err[2]
         print "summed_op", test_err[3]
         print "param grad abs sum", np.sum(np.abs(test_err[-1]))
+        print "\n"
         if save_data:
             fname = "epoch%s" % (epoch)
             full_fname = os.path.join(full_dir_name, fname)
