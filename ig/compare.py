@@ -56,12 +56,12 @@ def genshapebatch(nprims, nbatch):
     shapes = np.random.rand(nprims, nbatch, 3)*2 - 2
     return np.array(shapes, dtype=config.floatX)
 
-def gauss(x, mu=0.0, sigma = 0.05):
+def gauss(x, mu=0.0, sigma = 1.0):
     # Loss2 is to force change, avoid plateaus
     a = 1/(sigma*np.sqrt(2*np.pi))
     b = mu
     c = sigma
-    return a*T.exp((-x**2)/(2*c**2))
+    return a*T.exp((-(x-b)**2)/(2*c**2))
 
 def learn_to_move(nprims = 200, nbatch = 50, width = 224, height = 224):
     """Creates a network which takes as input a image and returns a cost.
@@ -103,7 +103,7 @@ def learn_to_move(nprims = 200, nbatch = 50, width = 224, height = 224):
     output = lasagne.layers.get_output(output_layer)
 
     #3 First half mvoe
-    learning_rate = 500
+    learning_rate = 1.0
     shape_params_split =  T.reshape(shape_params, (nprims, nbatch/2, 2, params_per_prim))
     first_half_params = shape_params_split[:,:,0,:]
 
@@ -141,8 +141,8 @@ def learn_to_move(nprims = 200, nbatch = 50, width = 224, height = 224):
     # loss2 = a*T.exp((-sumdiff2**2)/(2*c**2))/40.0
     # loss = loss1 + loss2
 
-    param_diff = T.sum((shape_params_split[:,:,0,:] -  shape_params_split[:,:,1,:])**2)/nbatch
-    loss2 = gauss(param_diff, mu=10.0)
+    param_diff = T.sum(first_half_delta**2)/nbatch
+    loss2 = -gauss(param_diff, mu=10.0)*3
     loss = loss1 + loss2
 
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
@@ -187,7 +187,8 @@ def train(network, costfunc,  exfragcoords,  nprims = 200, nbatch = 50, num_epoc
         print "loss", test_err[0]
         print "loss1", test_err[1]
         print "loss2", test_err[2]
-        print "summed_op", test_err[3]
+        print "pdiff", test_err[3]
+        print "summed_op", test_err[4]
         print "param grad abs sum", np.sum(np.abs(test_err[-1]))
         print "\n"
         if save_data:
