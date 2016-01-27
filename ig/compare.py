@@ -146,8 +146,8 @@ def learn_to_move(nprims = 200, nbatch = 50, width = 224, height = 224):
     loss = loss1 + loss2
 
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
-    # network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.1)
-    network_updates = lasagne.updates.adamax(loss, params)
+    network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.5)
+    # network_updates = lasagne.updates.adamax(loss, params)
 
     ## Merge Updates
     for k in network_updates.keys():
