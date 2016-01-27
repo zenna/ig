@@ -56,6 +56,13 @@ def genshapebatch(nprims, nbatch):
     shapes = np.random.rand(nprims, nbatch, 3)*2 - 2
     return np.array(shapes, dtype=config.floatX)
 
+def gauss(x, mu=0.0, sigma = 0.05):
+    # Loss2 is to force change, avoid plateaus
+    a = 1/(sigma*np.sqrt(2*np.pi))
+    b = mu
+    c = sigma
+    return a*T.exp((-x**2)/(2*c**2))
+
 def learn_to_move(nprims = 200, nbatch = 50, width = 224, height = 224):
     """Creates a network which takes as input a image and returns a cost.
     Network extracts features of image to create shape params which are rendered.
@@ -123,10 +130,9 @@ def learn_to_move(nprims = 200, nbatch = 50, width = 224, height = 224):
     diff = T.maximum(eps, (unchanged_img - res_reshape2)**2)
     loss1 = T.sum(diff) / (nbatch/2*width*height)
 
-    diff2 = T.maximum(eps, (changed_img - res_reshape2)**2)
-    sumdiff2 = T.sum(diff2) / (nbatch/2*width*height)
-
     ## Loss2 is to force change, avoid plateaus
+    # diff2 = T.maximum(eps, (changed_img - res_reshape2)**2)
+    # sumdiff2 = T.sum(diff2) / (nbatch/2*width*height)
     # mu = 0
     # sigma = 0.05
     # a = 1/(sigma*np.sqrt(2*np.pi))
@@ -135,7 +141,9 @@ def learn_to_move(nprims = 200, nbatch = 50, width = 224, height = 224):
     # loss2 = a*T.exp((-sumdiff2**2)/(2*c**2))/40.0
     # loss = loss1 + loss2
 
-    loss = loss1
+    param_diff = T.sum((shape_params_split[:,:,0,:] -  shape_params_split[:,:,1,:])**2)/nbatch
+    loss2 = gauss(param_diff, mu=10.0)
+    loss = loss1 + loss2
 
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
     # network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.1)
@@ -153,7 +161,7 @@ def learn_to_move(nprims = 200, nbatch = 50, width = 224, height = 224):
     params = lasagne.layers.get_all_params(output_layer)
     last_layer_params = T.grad(loss, params[-2])
     print("Compiling Loss Function")
-    netcost = function([fragCoords, shape_params], [loss, loss1, loss, sumdiff2, summed_op, delta_shape, res2, last_layer_params, unchanged_img, changed_img, res_reshape2], updates=scan_updates, mode=curr_mode)
+    netcost = function([fragCoords, shape_params], [loss, loss1, loss2, param_diff, summed_op, delta_shape, res2, last_layer_params, unchanged_img, changed_img, res_reshape2], updates=scan_updates, mode=curr_mode)
     return netcost, output_layer
 
 # import ig.display
