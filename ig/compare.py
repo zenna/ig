@@ -56,15 +56,13 @@ def genshapebatch(nprims, nbatch):
     shapes = np.random.rand(nprims, nbatch, 3)*2 - 2
     return np.array(shapes, dtype=config.floatX)
 
-def learn_to_move(nprims = 200, nbatch = 50):
+def learn_to_move(nprims = 200, nbatch = 50, width = 224, height = 224):
     """Creates a network which takes as input a image and returns a cost.
     Network extracts features of image to create shape params which are rendered.
     The similarity between the rendered image and the actual image is the cost
     """
 
     assert nbatch % 2 == 0      # Minibatch must be even in size
-    width = 224
-    height = 224
     params_per_prim = 3
     nshape_params = nprims * params_per_prim
 
@@ -76,11 +74,11 @@ def learn_to_move(nprims = 200, nbatch = 50):
     res_reshape = res.dimshuffle([2,'x',0,1])
 
     # Split batch in half and give each image two channels
-    res_reshape_split = T.reshape(res_reshape, (nbatch/2, 2, 224, 224))
+    res_reshape_split = T.reshape(res_reshape, (nbatch/2, 2, width, height))
 
     # Put the different convnets into two channels
     net = {}
-    net['input'] = InputLayer((nbatch/2, 2, 224, 224), input_var = res_reshape_split)
+    net['input'] = InputLayer((nbatch/2, 2, width, height), input_var = res_reshape_split)
     net['conv1'] = ConvLayer(net['input'], num_filters=96, filter_size=7, stride=2)
     net['norm1'] = NormLayer(net['conv1'], alpha=0.0001) # caffe has alpha = alpha * pool_size
     net['pool1'] = PoolLayer(net['norm1'], pool_size=3, stride=3, ignore_border=False)
@@ -123,10 +121,10 @@ def learn_to_move(nprims = 200, nbatch = 50):
 
     eps = 1e-9
     diff = T.maximum(eps, (unchanged_img - res_reshape2)**2)
-    loss1 = T.sum(diff) / (nbatch/2*224*224)
+    loss1 = T.sum(diff) / (nbatch/2*width*height)
 
     diff2 = T.maximum(eps, (changed_img - res_reshape2)**2)
-    sumdiff2 = T.sum(diff2) / (nbatch/2*224*224)
+    sumdiff2 = T.sum(diff2) / (nbatch/2*width*height)
 
     ## Loss2 is to force change, avoid plateaus
     mu = 0
@@ -168,8 +166,13 @@ def train(network, costfunc,  exfragcoords,  nprims = 200, nbatch = 50, num_epoc
 
     print("Starting Training")
     for epoch in range(num_epochs):
-        rand_data = genshapebatch(nprims, nbatch)
-        test_err = costfunc(exfragcoords, rand_data)
+        rand_shape_params = genshapebatch(nprims, nbatch)
+        params_per_prim = 3
+        shape_params_split =  np.reshape(rand_shape_params, (nprims, nbatch/2, 2, params_per_prim))
+        rand_perturbation = np.random.rand(shape_params_split[:,:,0,:].shape) * 0.1
+        shape_params_split[:,:,0,:] = shape_params_split[:,:,1,:] + rand_perturbation
+        np.reshape(shape_params_split, (nprims, nbatch, params_per_prim)
+        test_err = costfunc(exfragcoords, rand_shape_params)
         print "epoch", epoch
         print "loss", test_err[0]
         print "loss1", test_err[1]
@@ -192,10 +195,9 @@ def network_mb(network):
 width = 224
 height = 224
 exfragcoords = gen_fragcoords(width, height)
-
 nprims = 50
 nbatch = 24
-costfunc, network = learn_to_move(nprims = nprims, nbatch = nbatch)
+costfunc, network = learn_to_move(nprims = nprims, nbatch = nbatch, width = width, height = height)
 # print "Weights in MB"
 # print network_mb(network)
 train(network, costfunc, exfragcoords, nprims = nprims, nbatch = nbatch)
