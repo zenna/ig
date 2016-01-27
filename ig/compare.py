@@ -177,11 +177,11 @@ def train(network, costfunc,  exfragcoords,  nprims = 200, nbatch = 50, num_epoc
     print("Starting Training")
     for epoch in range(num_epochs):
         rand_shape_params = genshapebatch(nprims, nbatch)
-        params_per_prim = 3
-        shape_params_split =  np.reshape(rand_shape_params, (nprims, nbatch/2, 2, params_per_prim))
-        rand_perturbation = np.random.rand(*(shape_params_split[:,:,0,:].shape)) * 0.1
-        shape_params_split[:,:,0,:] = shape_params_split[:,:,1,:] + rand_perturbation
-        np.reshape(shape_params_split, (nprims, nbatch, params_per_prim))
+        # params_per_prim = 3
+        # shape_params_split =  np.reshape(rand_shape_params, (nprims, nbatch/2, 2, params_per_prim))
+        # rand_perturbation = np.random.rand(*(shape_params_split[:,:,0,:].shape)) * 0.1
+        # shape_params_split[:,:,0,:] = shape_params_split[:,:,1,:] + rand_perturbation
+        # np.reshape(shape_params_split, (nprims, nbatch, params_per_prim))
         test_err = costfunc(exfragcoords, rand_shape_params)
         print "epoch", epoch
         print "loss", test_err[0]
