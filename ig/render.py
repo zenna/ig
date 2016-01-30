@@ -142,3 +142,24 @@ def gen_fragcoords(width, height):
         for j in range(height):
             fragCoords[i,j] = np.array([i,j], dtype=config.floatX) + 0.5
     return fragCoords
+
+# This generates a d
+import lasagne
+def similarity_cost3(observed_features, shape_params, nprims, width, height):
+    shared_observed_features = [theano.shared(feature) for feature in observed_features]
+    fragCoords = T.tensor3()
+    res, updates = symbolic_render(nprims, shape_params, fragCoords, width, height)
+    # res_tiled = T.tile(res,(1,3,1,1))
+    res_tiled = T.reshape(T.tile(res, 3),(1,3,width,height))
+    proposal_features = vgg_features(res_tiled)
+    summed_dists = feature_compare(proposal_features, shared_observed_features)
+    loss = T.sum(summed_dists)
+    network_updates = lasagne.updates.nesterov_momentum(loss, [shape_params], learning_rate=1.0, momentum=1.0)
+
+    ## Merge Updates
+    for k in network_updates.keys():
+        assert not(updates.has_key(k))
+        updates[k] = network_updates[k]
+
+    cost_compiled = function([fragCoords], [loss, res], updates=updates, mode=curr_mode)
+    return cost_compiled

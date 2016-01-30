@@ -97,7 +97,7 @@ def learn_to_move(nprims = 200, nbatch = 50, width = 224, height = 224):
     net['pool5'] = PoolLayer(net['conv5'], pool_size=3, stride=3, ignore_border=False)
     net['fc6'] = DenseLayer(net['pool5'], num_units=4096)
     net['drop6'] = DropoutLayer(net['fc6'], p=0.5)
-    net['fc7'] = DenseLayer(net['drop6'], num_units=1, nonlinearity=lasagne.nonlinearities.rectify)
+    net['fc7'] = DenseLayer(net['drop6'], num_units=1, nonlinearity=lasagne.nonlinearities.tanh)
     # net['fc7'] = DenseLayer(net['pool5'], num_units=nshape_params, nonlinearity=lasagne.nonlinearities.tanh)
     output_layer = net['fc7']
     output = lasagne.layers.get_output(output_layer)
@@ -142,7 +142,7 @@ def learn_to_move(nprims = 200, nbatch = 50, width = 224, height = 224):
     # loss = loss1 + loss2
 
     param_diff = T.sum(first_half_delta**2)/nbatch
-    loss2 = -gauss(param_diff, mu=10.0, sigma=10.0)*40
+    loss2 = -gauss(param_diff, mu=10.0, sigma=100.0)*600
     loss = loss1 + loss2
 
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
