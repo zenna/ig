@@ -190,7 +190,7 @@ def train(network, costfunc,  exfragcoords,  nprims = 200, nbatch = 50, num_epoc
         print "loss2", test_err[2]
         print "pdiff", test_err[3]
         print "summed_op", test_err[4]
-        print "param grad abs sum", np.sum(np.abs(test_err[-1]))
+        print "param grad abs sum", np.sum(np.abs(test_err[7]))
         print "\n"
         if save_data:
             fname = "epoch%s" % (epoch)
