@@ -1,7 +1,26 @@
 ## Volume Raycasting
 from theano import function, config, shared, printing
 import numpy as np
+import os.path
+import subprocess
+import time
 
+## Extract features from an image
+import lasagne
+import theano
+import theano.sandbox.cuda.dnn
+from lasagne.layers import InputLayer, DenseLayer, DropoutLayer
+if theano.sandbox.cuda.dnn.dnn_available():
+    from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
+else:
+    from lasagne.layers import Conv2DLayer as ConvLayer
+
+from lasagne.layers import MaxPool2DLayer as PoolLayer
+from lasagne.layers import LocalResponseNormalization2DLayer as NormLayer
+from lasagne.utils import floatX
+from theano import tensor as T
+from theano import function, config, shared
+import pickle
 
 def gen_fragcoords(width, height):
     """Create a (width * height * 2) matrix, where element i,j is [i,j]
@@ -55,6 +74,16 @@ def make_render(shape_params, width, height):
 def switch(cond, a, b):
     return cond*a + (1-cond)*b
 
+def raymarch(img, left_over, i, step_size, orig, rd, res, shape_params):
+    return {img : img + 1}
+    # pos = orig + rd*step_size*i
+    # voxel_indices = T.floor(pos*res)
+    # pruned = T.clip(voxel_indices,0,res-1)
+    # p_int =  T.cast(pruned, 'int64')
+    # indices = T.reshape(p_int, (width*height,3))
+    # value = shape_params[indices[:,0],indices[:,1],indices[:,2]] / nsteps
+    # return {img : img + value * left_over, left_over : (1-value)*left_over, i : i+1}
+
 def main(shape_params, width, height, nsteps, res, ro = [3.5, 2.8, 3.0], ta = [-0.5, -0.4, 0.5]):
     fragCoords = gen_fragcoords(width, height)
     rd, ro = symbolic_render(ro, ta, shape_params, fragCoords, width, height)
@@ -67,8 +96,8 @@ def main(shape_params, width, height, nsteps, res, ro = [3.5, 2.8, 3.0], ta = [-
     # do X
     tn_x = tn_true[:,:,0]
     tf_x = tf_true[:,:,0]
-    tmin = np.full(tn_x.shape, 0)
-    tmax = np.full(tn_x.shape, 10)
+    tmin = 0.0
+    tmax = 1.0
     t0 = tmin
     t1 = tmax
     t02 = switch(tn_x > t0, tn_x, t0)
@@ -88,29 +117,41 @@ def main(shape_params, width, height, nsteps, res, ro = [3.5, 2.8, 3.0], ta = [-
     t04 = t04*1.001
     t14 = t14*0.999
 
-    width = rd.shape[0]
-    height = rd.shape[1]
-    img = np.zeros(width * height)
-    left_over = np.ones(width * height)
-    step_size = (t14 - t04)/nsteps
-    orig = ro + rd* np.reshape(t04,(width, height, 1))
-    step_size = np.reshape(step_size, (width, height, 1))
-    for i in range(nsteps):
-        # print "step", i
-        pos = orig + rd*step_size*i
-        voxel_indices = np.floor(pos*res)
-        pruned = np.clip(voxel_indices,0,res-1)
-        p_int = pruned.astype('int')
-        indices = np.reshape(p_int, (width*height,3))
-        value = shape_params[indices[:,0],indices[:,1],indices[:,2]] / nsteps
-        # print "value", np.sum(value)
-        # print "indices", np.sum(indices)
-        # print "pos", np.sum(pos)
-        img = img + value * left_over
-        left_over = (1-value)*left_over
+    img = shared(np.zeros(width * height))
+    left_over = shared(np.ones(width * height))
+    i = shared(0)
 
-    pixels = np.reshape(img,(width, height))
-    return switch(t14>t04, pixels, np.zeros(pixels.shape))
+    # Non sequences
+    step_size = (t14 - t04)/nsteps
+    orig = shared(ro + rd* np.reshape(t04,(width, height, 1)))
+    rd = shared(rd)
+    step_size = shared(np.reshape(step_size, (width, height, 1)))
+    shape_params = shared(shape_params)
+    res = shared(res)
+    print "i", i
+    print "img", img
+    print "left_over", left_over
+
+    results, updates = theano.scan(raymarch, outputs_info=[img, left_over, i], non_sequences=[step_size, orig, rd, res, shape_params], n_steps = nsteps)
+    return function([], results[-1], updates=updates)
+    # return function([], t14 > t04)
+
+    # for i in range(nsteps):
+    #     # print "step", i
+    #     pos = orig + rd*step_size*i
+    #     voxel_indices = np.floor(pos*res)
+    #     pruned = np.clip(voxel_indices,0,res-1)
+    #     p_int = pruned.astype('int')
+    #     indices = np.reshape(p_int, (width*height,3))
+    #     value = shape_params[indices[:,0],indices[:,1],indices[:,2]] / nsteps
+    #     # print "value", np.sum(value)
+    #     # print "indices", np.sum(indices)
+    #     # print "pos", np.sum(pos)
+    #     img = img + value * left_over
+    #     left_over = (1-value)*left_over
+    #
+    # pixels = np.reshape(img,(width, height))
+    # return switch(t14>t04, pixels, np.zeros(pixels.shape))
 
 from matplotlib import pylab as plt
 
