@@ -118,8 +118,8 @@ def main(shape_params, width, height, nsteps, res, ro = [3.5, 2.8, 3.0], ta = [-
     t04 = t04*1.001
     t14 = t14*0.999
 
-    img = shared(np.zeros(width * height))
-    left_over = shared(np.ones(width * height))
+    img = shared(np.zeros(width * height,dtype=config.floatX))
+    left_over = shared(np.ones(width * height, dtype=config.floatX))
     i = shared(0)
 
     # Non sequences
@@ -152,7 +152,7 @@ def histo(x):
     n, bins, patches = plt.hist(x.flatten(), 500,range=(0.0001,1), normed=1, facecolor='green', alpha=0.75)
     plt.show()
 
-observed_img = np.load("footimg.npy")
+observed_img = np.load("footimg.npy").astype(config.floatX)
 
 width = 200
 height = 200
@@ -163,7 +163,7 @@ res = 256
 # shape_params = np.clip(shape_params,0,1)
 # shape_params = shape_params - np.min(shape_params) * (np.max(shape_params) - np.min(shape_params))
 shape_params = load_voxels_binary("foot.raw", 256, 256, 256)
-shape_params = np.random.rand(res, res, res)*0.01l
+shape_params = (np.random.rand(res, res, res)*0.01).astype(config.floatX)
 nsteps = 500
 ro = [1.5, 1.4, 1.5]
 ta = [0.7, 0.1, 0.5]
