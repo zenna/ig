@@ -134,12 +134,13 @@ def main(shape_params, width, height, nsteps, res, ro = [3.5, 2.8, 3.0], ta = [-
 
     results, updates = theano.scan(raymarch, outputs_info=[img], non_sequences=[left_over, i, step_size, orig, rd, res, shape_params], n_steps = nsteps)
     outimg = results[-1]
+    outimg = T.reshape(outimg, (width, height))
+    outimg = T.switch(t14>t04, outimg, 0.0)
     eps = 1e-9
-    diff = T.maximum(eps, (outimg   - observed_img)**2)
+    diff = T.maximum(eps, (outimg   - np.reshape(observed_img, (width, height)))**2)
     per_pixel_loss = T.sum(diff) / (width*height)
     grad = T.grad(per_pixel_loss, shape_params)
     return function([], [outimg, per_pixel_loss, grad], updates=updates)
-
 
 def load_voxels_binary(fname, width, height, depth, max_value=255.0):
     data = np.fromfile(fname, dtype='uint8')
@@ -162,15 +163,15 @@ res = 256
 # shape_params = np.sin(x*y*z)/(x*y*z)
 # shape_params = np.clip(shape_params,0,1)
 # shape_params = shape_params - np.min(shape_params) * (np.max(shape_params) - np.min(shape_params))
-shape_params = load_voxels_binary("foot.raw", 256, 256, 256)
+# shape_params = load_voxels_binary("foot.raw", 256, 256, 256)
 shape_params = (np.random.rand(res, res, res)*0.01).astype(config.floatX)
-nsteps = 500
+nsteps = 100
 ro = [1.5, 1.4, 1.5]
 ta = [0.7, 0.1, 0.5]
 f = main(shape_params, width, height, nsteps, res, ro=ro, ta=ta)
 outimg, per_pixel_loss, grad = f()
 
-f()
+#f()
 # plt.imshow(np.reshape(img.get_value(),(200,200)))
 # plt.figure()
 # plt.imshow(img)
