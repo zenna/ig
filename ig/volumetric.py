@@ -22,6 +22,8 @@ from theano import tensor as T
 from theano import function, config, shared
 import pickle
 
+config.exception_verbosity='high'
+
 def gen_fragcoords(width, height):
     """Create a (width * height * 2) matrix, where element i,j is [i,j]
        This is used to generate ray directions based on an increment"""
@@ -75,14 +77,13 @@ def switch(cond, a, b):
     return cond*a + (1-cond)*b
 
 def raymarch(img, left_over, i, step_size, orig, rd, res, shape_params):
-    return {img : img + 1}
-    # pos = orig + rd*step_size*i
-    # voxel_indices = T.floor(pos*res)
-    # pruned = T.clip(voxel_indices,0,res-1)
-    # p_int =  T.cast(pruned, 'int64')
-    # indices = T.reshape(p_int, (width*height,3))
-    # value = shape_params[indices[:,0],indices[:,1],indices[:,2]] / nsteps
-    # return {img : img + value * left_over, left_over : (1-value)*left_over, i : i+1}
+    pos = orig + rd*step_size*i
+    voxel_indices = T.floor(pos*res)
+    pruned = T.clip(voxel_indices,0,res-1)
+    p_int =  T.cast(pruned, 'int32')
+    indices = T.reshape(p_int, (width*height,3))
+    value = shape_params[indices[:,0],indices[:,1],indices[:,2]] / nsteps
+    return (img + value * left_over, {left_over : (1-value)*left_over, i : i+1})
 
 def main(shape_params, width, height, nsteps, res, ro = [3.5, 2.8, 3.0], ta = [-0.5, -0.4, 0.5]):
     fragCoords = gen_fragcoords(width, height)
@@ -97,7 +98,7 @@ def main(shape_params, width, height, nsteps, res, ro = [3.5, 2.8, 3.0], ta = [-
     tn_x = tn_true[:,:,0]
     tf_x = tf_true[:,:,0]
     tmin = 0.0
-    tmax = 1.0
+    tmax = 10.0
     t0 = tmin
     t1 = tmax
     t02 = switch(tn_x > t0, tn_x, t0)
@@ -126,45 +127,32 @@ def main(shape_params, width, height, nsteps, res, ro = [3.5, 2.8, 3.0], ta = [-
     orig = shared(ro + rd* np.reshape(t04,(width, height, 1)))
     rd = shared(rd)
     step_size = shared(np.reshape(step_size, (width, height, 1)))
+    step_size = T.addbroadcast(step_size, 2)
     shape_params = shared(shape_params)
     res = shared(res)
-    print "i", i
-    print "img", img
-    print "left_over", left_over
+    print "Res", res, "\n"
 
-    results, updates = theano.scan(raymarch, outputs_info=[img, left_over, i], non_sequences=[step_size, orig, rd, res, shape_params], n_steps = nsteps)
-    return function([], results[-1], updates=updates)
-    # return function([], t14 > t04)
+    results, updates = theano.scan(raymarch, outputs_info=[img], non_sequences=[left_over, i, step_size, orig, rd, res, shape_params], n_steps = nsteps)
+    outimg = results[-1]
+    eps = 1e-9
+    diff = T.maximum(eps, (outimg   - observed_img)**2)
+    per_pixel_loss = T.sum(diff) / (width*height)
+    grad = T.grad(per_pixel_loss, shape_params)
+    return function([], [outimg, per_pixel_loss, grad], updates=updates)
 
-    # for i in range(nsteps):
-    #     # print "step", i
-    #     pos = orig + rd*step_size*i
-    #     voxel_indices = np.floor(pos*res)
-    #     pruned = np.clip(voxel_indices,0,res-1)
-    #     p_int = pruned.astype('int')
-    #     indices = np.reshape(p_int, (width*height,3))
-    #     value = shape_params[indices[:,0],indices[:,1],indices[:,2]] / nsteps
-    #     # print "value", np.sum(value)
-    #     # print "indices", np.sum(indices)
-    #     # print "pos", np.sum(pos)
-    #     img = img + value * left_over
-    #     left_over = (1-value)*left_over
-    #
-    # pixels = np.reshape(img,(width, height))
-    # return switch(t14>t04, pixels, np.zeros(pixels.shape))
-
-from matplotlib import pylab as plt
 
 def load_voxels_binary(fname, width, height, depth, max_value=255.0):
     data = np.fromfile(fname, dtype='uint8')
     return np.reshape(data, (width, height, depth))/float(max_value)
 
+# from matplotlib import pylab as plt
+# plt.ion()
 def histo(x):
     # the histogram of the data
     n, bins, patches = plt.hist(x.flatten(), 500,range=(0.0001,1), normed=1, facecolor='green', alpha=0.75)
     plt.show()
 
-plt.ion()
+observed_img = np.load("footimg.npy")
 
 width = 200
 height = 200
@@ -175,10 +163,15 @@ res = 256
 # shape_params = np.clip(shape_params,0,1)
 # shape_params = shape_params - np.min(shape_params) * (np.max(shape_params) - np.min(shape_params))
 shape_params = load_voxels_binary("foot.raw", 256, 256, 256)
-nsteps = 1000
+shape_params = np.random.rand(res, res, res)*0.01l
+nsteps = 500
 ro = [1.5, 1.4, 1.5]
 ta = [0.7, 0.1, 0.5]
-img = main(shape_params, width, height, nsteps, res, ro=ro, ta=ta)
-plt.figure()
-plt.imshow(img)
-plt.draw()
+f = main(shape_params, width, height, nsteps, res, ro=ro, ta=ta)
+outimg, per_pixel_loss, grad = f()
+
+f()
+# plt.imshow(np.reshape(img.get_value(),(200,200)))
+# plt.figure()
+# plt.imshow(img)
+# plt.draw()
