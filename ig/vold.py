@@ -1,6 +1,12 @@
 ## Volume Raycasting
 from theano import function, config, shared, printing
 import numpy as np
+from scipy.sparse import csr_matrix
+try:
+    from mayavi import mlab
+except:
+    print "couldnt import"
+from mayavi import mlab
 
 
 def gen_fragcoords(width, height):
@@ -93,6 +99,11 @@ def main(shape_params, width, height, nsteps, res, ro = [3.5, 2.8, 3.0], ta = [-
     step_size = (t14 - t04)/nsteps
     orig = ro + rd* np.reshape(t04,(width, height, 1))
     step_size = np.reshape(step_size, (width, height, 1))
+    step_size_flat = step_size.flatten()
+    xres = yres = zres = res
+    nrays = width * height
+    nvoxels = xres * yres * zres
+    A = csr_matrix((nrays, nvoxels))
     for i in range(nsteps):
         # print "step", i
         pos = orig + rd*step_size*i
@@ -100,6 +111,9 @@ def main(shape_params, width, height, nsteps, res, ro = [3.5, 2.8, 3.0], ta = [-
         pruned = np.clip(voxel_indices,0,res-1)
         p_int = pruned.astype('int')
         indices = np.reshape(p_int, (width*height,3))
+        unique_indices = indices[:,0]*yres*zres + indices[:,1]*zres + indices[:,2]
+        A_inc = csr_matrix((step_size_flat, (np.arange(nrays), unique_indices)), shape=(nrays, nvoxels))
+        A = A + A_inc
         attenuation = shape_params[indices[:,0],indices[:,1],indices[:,2]]
         left_over = left_over*np.exp(-attenuation*np.reshape(step_size, (width * height)))
         # print "value", np.sum(value)
@@ -107,10 +121,10 @@ def main(shape_params, width, height, nsteps, res, ro = [3.5, 2.8, 3.0], ta = [-
         # print "pos", np.sum(pos)
         # img = img + value * left_over
         # left_over = (1-value)*left_over
-    img = 1.0 - left_over
+    img = left_over
     pixels = np.reshape(img,(width, height))
     # return t14>t04
-    return switch(t14>t04, pixels, np.zeros(pixels.shape))
+    return switch(t14>t04, pixels, np.ones(pixels.shape)), A_inc, t14>t04
 
 from matplotlib import pylab as plt
 
@@ -133,7 +147,7 @@ res = 256
 # shape_params = np.sin(x*y*z)/(x*y*z)
 # shape_params = np.clip(shape_params,0,1)
 # shape_params = shape_params - np.min(shape_params) * (np.max(shape_params) - np.min(shape_params))
-shape_params = load_voxels_binary("aneurism.raw", 256, 256, 256)*10.0
+shape_params = load_voxels_binary("person_0089.raw", 256, 256, 256)*10.0
 #
 # shape_params = np.zeros((res,res,res))
 # q = np.transpose(np.mgrid[0:1:complex(res),0:1:complex(res),0:1:complex(res)],(1,2,3,0))
@@ -145,7 +159,13 @@ nsteps = 100
 ro = [1.5, 1.4, 1.5]
 ta = [0.7, 0.1, 0.5]
 print "Drawing"
-img = main(shape_params, width, height, nsteps, res, ro=ro, ta=ta)
+img, A, mask = main(shape_params, width, height, nsteps, res, ro=ro, ta=ta)
 plt.figure()
 plt.imshow(img)
 plt.draw()
+
+from scipy import sparse
+b = np.log(img.flatten())
+sol = sparse.linalg.lsqr
+(A, b)
+voxels = np.reshape(sol, (res, res, res))
