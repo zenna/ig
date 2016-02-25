@@ -220,4 +220,14 @@ f = function([shape_params, rotation_matrices], out)
 voxel_data = load_voxels_binary("person_0089.raw", res, res, res)*10.0
 r = random_rotation_matrices(2)
 print "Rendering"
-f(voxel_data, r)
+imgdata = f(voxel_data, r)
+
+views = T.tensor3() # nbatches * width * height
+cost = dist(views, out)
+
+def dist(a, b):
+    eps = 1e-9
+    return T.sum(T.maximum(eps, (a - b)**2))
+
+cost_f = function([shape_params, rotation_matrices, views], cost)
+result = cost_f([shape_params, r, views])
