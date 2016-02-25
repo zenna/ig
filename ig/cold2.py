@@ -26,7 +26,7 @@ from theano import tensor as T
 from theano import function, config, shared
 import pickle
 
-config.exception_verbosity='high'
+# config.exception_verbosity='high'
 config.optimizer = 'None'
 
 def rand_rotation_matrix(deflection=1.0, randnums=None):
@@ -71,6 +71,9 @@ def rand_rotation_matrix(deflection=1.0, randnums=None):
     M = (np.outer(V, V) - np.eye(3)).dot(R)
     return M
 
+# n random matrices
+def random_rotation_matrices(n):
+    return np.stack([rand_rotation_matrix() for i in range(n)])
 
 # Genereate values in raster space, x[i,j] = [i,j]
 def gen_fragcoords(width, height):
@@ -87,9 +90,10 @@ def stack(intensor, width, height, scalar):
     scalars = np.ones([width, height, 1], dtype=config.floatX) * scalar
     return np.concatenate([intensor, scalars], axis=2)
 
-def symbolic_render(r, raster_space, width, height):
+def make_ro(r, raster_space, width, height):
     """Symbolically render rays starting with raster_space according to geometry
       e  defined by """
+    nmatrices = r.shape[0]
     resolution = np.array([width, height], dtype=config.floatX)
     # Normalise it to be bound between 0 1
     norm_raster_space = raster_space / resolution
@@ -106,15 +110,17 @@ def symbolic_render(r, raster_space, width, height):
     ro = np.array([0,0,1.5])
 
     # Rotate both by same rotation matrix
-    ro_t = T.dot(ro, r)
-    ndc_t = T.dot(ndc_xyz, r)
+    ro_t = T.dot(T.reshape(ro, (1,3)), r)
+    ndc_t = T.dot(T.reshape(ndc_xyz, (1, width, height, 3)), r)
+    ndc_t = T.reshape(ndc_t, (width, height, nmatrices, 3))
+    ndc_t = T.transpose(ndc_t, (2,0,1,3))
 
     # Increment by 0.5 since voxels are in [0, 1]
     ro_t = ro_t + 0.5
     ndc_t = ndc_t + 0.5
     # Find normalise ray dirs from origin to image plane
-    unnorm_rd = ndc_t - ro_t
-    rd = unnorm_rd / T.reshape(unnorm_rd.norm(2, axis=2), (width, height, 1))
+    unnorm_rd = ndc_t - T.reshape(ro_t, (nmatrices,1,1,3))
+    rd = unnorm_rd / T.reshape(unnorm_rd.norm(2, axis=3), (nmatrices, width, height, 1))
     return rd, ro_t
 
 def switch(cond, a, b):
@@ -122,16 +128,17 @@ def switch(cond, a, b):
 
 def gen_img(shape_params, rotation_matrix, width, height, nsteps, res):
     raster_space = gen_fragcoords(width, height)
-    rd, ro = symbolic_render(rotation_matrix, raster_space, width, height)
+    rd, ro = make_ro(rotation_matrix, raster_space, width, height)
     a = 0 - ro # c = 0
     b = 1 - ro # c = 1
-    tn = a/rd
-    tf = b/rd
+    nmatrices = rotation_matrix.shape[0]
+    tn = T.reshape(a, (nmatrices, 1, 1, 3))/rd
+    tf = T.reshape(b, (nmatrices, 1, 1, 3))/rd
     tn_true = T.minimum(tn,tf)
     tf_true = T.maximum(tn,tf)
     # do X
-    tn_x = tn_true[:,:,0]
-    tf_x = tf_true[:,:,0]
+    tn_x = tn_true[:,:,:,0]
+    tf_x = tf_true[:,:,:,0]
     tmin = 0.0
     tmax = 10.0
     t0 = tmin
@@ -139,42 +146,44 @@ def gen_img(shape_params, rotation_matrix, width, height, nsteps, res):
     t02 = T.switch(tn_x > t0, tn_x, t0)
     t12 = T.switch(tf_x < t1, tf_x, t1)
     # y
-    tn_x = tn_true[:,:,1]
-    tf_x = tf_true[:,:,1]
+    tn_x = tn_true[:,:,:,1]
+    tf_x = tf_true[:,:,:,1]
     t03 = T.switch(tn_x > t02, tn_x, t02)
     t13 = T.switch(tf_x < t12, tf_x, t12)
     #z
-    tn_x = tn_true[:,:,2]
-    tf_x = tf_true[:,:,2]
+    tn_x = tn_true[:,:,:,2]
+    tf_x = tf_true[:,:,:,2]
     t04 = T.switch(tn_x > t03, tn_x, t03)
     t14 = T.switch(tf_x < t13, tf_x, t13)
 
-    # Shit a little bit to avoid numerial inaccuracies
+    # Shift a little bit to avoid numerial inaccuracies
     t04 = t04*1.001
     t14 = t14*0.999
 
-    # img = np.zeros(width * height)
-    left_over = np.ones(width * height)
+    # img = T.zeros(width * height)
+    left_over = T.ones((nmatrices * width * height,))
     step_size = (t14 - t04)/nsteps
-    orig = ro + rd* T.reshape(t04,(width, height, 1))
-    step_size = T.reshape(step_size, (width, height, 1))
-    step_size_flat = step_size.flatten()
+    orig = T.reshape(ro, (nmatrices, 1, 1, 3)) + rd * T.reshape(t04,(nmatrices, width, height, 1))
+    # step_size = T.reshape(step_size, (width, height, 1))
+    # step_size_flat = step_size.flatten()
     xres = yres = zres = res
-    nrays = width * height
-    nvoxels = xres * yres * zres
-    # A = csr_matrix((nrays, nvoxels))
+
+    orig = T.reshape(orig, (nmatrices * width * height, 3))
+    rd = T.reshape(rd, (nmatrices * width * height, 3))
+    step_sz = T.reshape(step_size, (nmatrices * width * height,1))
+
     for i in range(nsteps):
         # print "step", i
-        pos = orig + rd*step_size*i
+        pos = orig + rd*step_sz*i
         voxel_indices = T.floor(pos*res)
         pruned = T.clip(voxel_indices,0,res-1)
         p_int =  T.cast(pruned, 'int32')
-        indices = T.reshape(p_int, (width*height,3))
+        indices = T.reshape(p_int, (nmatrices*width*height,3))
         attenuation = shape_params[indices[:,0],indices[:,1],indices[:,2]]
-        left_over = left_over*T.exp(-attenuation*step_size_flat)
+        left_over = left_over*T.exp(-attenuation*T.flatten(step_sz))
 
     img = left_over
-    pixels = T.reshape(img,(width, height))
+    pixels = T.reshape(img, (nmatrices, width, height))
     mask = t14>t04
     return T.switch(t14>t04, pixels, T.ones_like(pixels))
 
@@ -202,26 +211,13 @@ nsteps = 100
 # shape_params = shape_params - np.min(shape_params) * (np.max(shape_params) - np.min(shape_params))
 
 
-rotation_matrix = T.matrix()
+rotation_matrices = T.tensor3()
 shape_params = T.tensor3()
-out = gen_img(shape_params, rotation_matrix, width, height, nsteps, res)
-f = function([shape_params, rotation_matrix], out)
+out = gen_img(shape_params, rotation_matrices, width, height, nsteps, res)
+print "Compiling"
+f = function([shape_params, rotation_matrices], out)
 
 voxel_data = load_voxels_binary("person_0089.raw", res, res, res)*10.0
-f(voxel_data)
-
-# 1. TODO, update it to take in rotation tensor
-#
-one image in creates one voxel grid.  then we render that in 5 different waysself.
-
-#
-# def train():
-#     views_per_img = 3
-#     nobjects = 3
-#     # Generate n images with n known different views of an m objects
-#     nsteps = 100
-#     rs = []
-#     As = []
-#     imgs = []
-#     r = rand_rotation_matrix()
-#     img, A, mask, img_lim = main(shape_params, r, width, height, nsteps, res)
+r = random_rotation_matrices(2)
+print "Rendering"
+f(voxel_data, r)
