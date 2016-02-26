@@ -1,12 +1,11 @@
 ## Volume Raycasting
 from theano import function, config, shared, printing
 import numpy as np
-from scipy.sparse import csr_matrix
-try:
-    from mayavi import mlab
-except:
-    print "couldnt import"
-from mayavi import mlab
+# try:
+#     from mayavi import mlab
+# except:
+#     print "couldnt import"
+# from mayavi import mlab
 
 
 ## Extract features from an image
@@ -161,7 +160,8 @@ def gen_img(shape_params, rotation_matrix, width, height, nsteps, res):
     t14 = t14*0.999
 
     # img = T.zeros(width * height)
-    left_over = T.ones((nmatrices * width * height,))
+    nvoxgrids = shape_params.shape[0]
+    left_over = T.ones((nvoxgrids, nmatrices * width * height,))
     step_size = (t14 - t04)/nsteps
     orig = T.reshape(ro, (nmatrices, 1, 1, 3)) + rd * T.reshape(t04,(nmatrices, width, height, 1))
     # step_size = T.reshape(step_size, (width, height, 1))
@@ -179,11 +179,11 @@ def gen_img(shape_params, rotation_matrix, width, height, nsteps, res):
         pruned = T.clip(voxel_indices,0,res-1)
         p_int =  T.cast(pruned, 'int32')
         indices = T.reshape(p_int, (nmatrices*width*height,3))
-        attenuation = shape_params[indices[:,0],indices[:,1],indices[:,2]]
+        attenuation = shape_params[:, indices[:,0],indices[:,1],indices[:,2]]
         left_over = left_over*T.exp(-attenuation*T.flatten(step_sz))
 
     img = left_over
-    pixels = T.reshape(img, (nmatrices, width, height))
+    pixels = T.reshape(img, (nvoxgrids, nmatrices, width, height))
     mask = t14>t04
     return T.switch(t14>t04, pixels, T.ones_like(pixels))
 
@@ -211,23 +211,59 @@ nsteps = 100
 # shape_params = shape_params - np.min(shape_params) * (np.max(shape_params) - np.min(shape_params))
 
 
+#
+def dist(a, b):
+    eps = 1e-9
+    return T.sum(T.maximum(eps, (a - b)**2))
+#
+# cost = dist(views, out)
+# cost_f = function([shape_params, rotation_matrices, views], cost)
+# result = cost_f(voxel_data, r, imgdata)
+#
+def second_order(rotation_matrices, imagebatch, width = 224, height = 224, res = 256):
+    """Creates a network which takes as input a image and returns a cost.
+    Network extracts features of image to create shape params which are rendered.
+    The similarity between the rendered image and the actual image is the cost
+    """
+    first_img = imagebatch[:,0,:,:]
+    nvoxgrids = imagebatch.shape[0]
+    # height = imagebatch.shape[3]
+    # width = imagebatch.shape[2]
+    first_img = T.reshape(first_img, (nvoxgrids,1,width,height))
+
+    # Put the different convnets into two channels
+    net = {}
+    net['input'] = InputLayer((None, 1, width, height), input_var = first_img)
+    net['conv1'] = ConvLayer(net['input'], num_filters=96, filter_size=7, stride=2)
+    net['norm1'] = NormLayer(net['conv1'], alpha=0.0001) # caffe has alpha = alpha * pool_size
+    net['pool1'] = PoolLayer(net['norm1'], pool_size=3, stride=3, ignore_border=False)
+    net['conv2'] = ConvLayer(net['pool1'], num_filters=256, filter_size=5)
+    net['pool2'] = PoolLayer(net['conv2'], pool_size=2, stride=2, ignore_border=False)
+    net['conv3'] = ConvLayer(net['pool2'], num_filters=512, filter_size=3, pad=1)
+    net['conv4'] = ConvLayer(net['conv3'], num_filters=512, filter_size=3, pad=1)
+    net['conv5'] = ConvLayer(net['conv4'], num_filters=512, filter_size=3, pad=1)
+    net['pool5'] = PoolLayer(net['conv5'], pool_size=3, stride=3, ignore_border=False)
+    net['fc6'] = DenseLayer(net['pool5'], num_units=res**3, nonlinearity=lasagne.nonlinearities.rectify)
+    output_layer = net['fc6']
+    output = lasagne.layers.get_output(output_layer)
+    voxels = T.reshape(output, (nvoxgrids, res, res, res))
+    out = gen_img(voxels, rotation_matrices, width, height, nsteps, res)
+    cost = cost = dist(imagebatch, out)
+    return cost
+
 rotation_matrices = T.tensor3()
-shape_params = T.tensor3()
+shape_params = T.tensor4()
 out = gen_img(shape_params, rotation_matrices, width, height, nsteps, res)
 print "Compiling"
 f = function([shape_params, rotation_matrices], out)
 
-voxel_data = load_voxels_binary("person_0089.raw", res, res, res)*10.0
-r = random_rotation_matrices(2)
+voxel_data1 = load_voxels_binary("person_0089.raw", res, res, res)*10.0
+voxel_data2 = load_voxels_binary("foot.raw", res, res, res)*10.0
+voxel_data = np.stack([voxel_data1, voxel_data2])
+r = random_rotation_matrices(3)
 print "Rendering"
 imgdata = f(voxel_data, r)
 
-views = T.tensor3() # nbatches * width * height
-cost = dist(views, out)
-
-def dist(a, b):
-    eps = 1e-9
-    return T.sum(T.maximum(eps, (a - b)**2))
-
-cost_f = function([shape_params, rotation_matrices, views], cost)
-result = cost_f([shape_params, r, views])
+views = T.tensor4() # nbatches * width * height
+cost = second_order(rotation_matrices, views, width = width, height = height, res = res)
+ff = fuction([views, rotation_matrices], cost)
