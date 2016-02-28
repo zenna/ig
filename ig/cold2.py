@@ -282,7 +282,7 @@ def train(cost_f, render, nviews = 3, nvoxgrids=4, res = 128):
         r = random_rotation_matrices(nviews)
         print "Rendering Training Data"
         imgdata = render(voxel_data, r)
-        cost = cost_f(imgdata, rotation_matrices)
+        cost = cost_f(imgdata, r)
         print "cost is ", cost
 
 def main():
