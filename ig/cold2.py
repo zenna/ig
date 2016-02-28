@@ -26,7 +26,7 @@ from theano import function, config, shared
 import pickle
 
 # config.exception_verbosity='high'
-config.optimizer = 'None'
+# config.optimizer = 'None'
 
 def rand_rotation_matrix(deflection=1.0, randnums=None):
     """
@@ -220,36 +220,57 @@ def dist(a, b):
 # cost_f = function([shape_params, rotation_matrices, views], cost)
 # result = cost_f(voxel_data, r, imgdata)
 #
-def second_order(rotation_matrices, imagebatch, width = 224, height = 224, res = 256):
+def second_order(rotation_matrices, imagebatch, width = 128, height = 128, res = 128, nvoxgrids = 4):
     """Creates a network which takes as input a image and returns a cost.
     Network extracts features of image to create shape params which are rendered.
     The similarity between the rendered image and the actual image is the cost
     """
+    width = 134
+    height = 134
+
     first_img = imagebatch[:,0,:,:]
-    nvoxgrids = imagebatch.shape[0]
+    # nvoxgrids = imagebatch.shape[0]
     # height = imagebatch.shape[3]
     # width = imagebatch.shape[2]
     first_img = T.reshape(first_img, (nvoxgrids,1,width,height))
+    layers_per_layer = 4
+
 
     # Put the different convnets into two channels
     net = {}
-    net['input'] = InputLayer((None, 1, width, height), input_var = first_img)
-    net['conv1'] = ConvLayer(net['input'], num_filters=96, filter_size=7, stride=2)
+    net['input'] = InputLayer((nvoxgrids, 1, width, height), input_var = first_img)
+    net['conv1'] = ConvLayer(net['input'], num_filters=layers_per_layer*128, filter_size=7, stride=1)
     net['norm1'] = NormLayer(net['conv1'], alpha=0.0001) # caffe has alpha = alpha * pool_size
-    net['pool1'] = PoolLayer(net['norm1'], pool_size=3, stride=3, ignore_border=False)
-    net['conv2'] = ConvLayer(net['pool1'], num_filters=256, filter_size=5)
-    net['pool2'] = PoolLayer(net['conv2'], pool_size=2, stride=2, ignore_border=False)
-    net['conv3'] = ConvLayer(net['pool2'], num_filters=512, filter_size=3, pad=1)
-    net['conv4'] = ConvLayer(net['conv3'], num_filters=512, filter_size=3, pad=1)
-    net['conv5'] = ConvLayer(net['conv4'], num_filters=512, filter_size=3, pad=1)
-    net['pool5'] = PoolLayer(net['conv5'], pool_size=3, stride=3, ignore_border=False)
-    net['fc6'] = DenseLayer(net['pool5'], num_units=res**3, nonlinearity=lasagne.nonlinearities.rectify)
-    output_layer = net['fc6']
+    filters = lasagne.layers.get_output(net['norm1'])
+    stacks = T.reshape(filters, (nvoxgrids, res, layers_per_layer, res, res))
+    weights = shared(np.random.rand(1, res, layers_per_layer, res, res))
+    accum = T.sum(stacks * weights, axis=2)
+    # Relu
+    voxels = lasagne.nonlinearity.rectify(accum)
+        
+
+
+    net['reshaped'] = ReshapeLayer(net['norm1'], (nvoxgrids, layers_per_layer, res, width, height))
+    net['conv2'] = ConvLayer(net['norm1'], num_filters=256, filter_size=1, stride=1, nonlinearity=lasagne.nonlinearities.rectify)
+    net['drop6'] = DropoutLayer(net['conv2'], p=0.5)
+    output_layer = net['drop6']
     output = lasagne.layers.get_output(output_layer)
-    voxels = T.reshape(output, (nvoxgrids, res, res, res))
+    voxels = output
+    # a1 = output[:,0:256]
+    # a2 = output[:, 256:256*2]
+    # a3 = output[:, 256*2:256*3]
+    #
+    # a1 = T.reshape(a1, (nvoxgrids, 256, 1, 1))
+    # a2 = T.reshape(a2, (nvoxgrids, 1, 256, 1))
+    # a3 = T.reshape(a3, (nvoxgrids, 1, 1, 256))
+    # voxels = a1 * a2 * a3
+    # voxels = T.reshape(output, (nvoxgrids, res, res, res))
     out = gen_img(voxels, rotation_matrices, width, height, nsteps, res)
     cost = cost = dist(imagebatch, out)
-    return cost
+
+    params = lasagne.layers.get_all_params(output_layer, trainable=True)
+    network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
+    return cost, updates
 
 rotation_matrices = T.tensor3()
 shape_params = T.tensor4()
@@ -265,5 +286,12 @@ print "Rendering"
 imgdata = f(voxel_data, r)
 
 views = T.tensor4() # nbatches * width * height
-cost = second_order(rotation_matrices, views, width = width, height = height, res = res)
-ff = fuction([views, rotation_matrices], cost)
+cost, updates = second_order(rotation_matrices, views, width = width, height = height, res = res)
+ff = function([views, rotation_matrices], cost, updates = updates)
+
+print "Training"
+nvoxgrids = 3
+npochs = 100
+for i in range(npochs):
+
+    c = ff(imgdata, r)
