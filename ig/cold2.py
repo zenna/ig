@@ -281,7 +281,7 @@ def train(cost_f, render, nviews = 3, nvoxgrids=4, res = 128):
         voxel_data = [load_voxels_binary(v, res, res, res)*10.0 for v in filenames]
         r = random_rotation_matrices(nviews)
         print "Rendering Training Data"
-        imgdata = render(voxeldata, r)
+        imgdata = render(voxel_data, r)
         cost = cost_f(views, rotation_matrices)
         print "cost is ", cost
 
