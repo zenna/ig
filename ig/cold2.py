@@ -26,7 +26,7 @@ from theano import function, config, shared
 import pickle
 
 # config.exception_verbosity='high'
-# config.optimizer = 'None'
+config.optimizer = 'None'
 
 def rand_rotation_matrix(deflection=1.0, randnums=None):
     """
@@ -269,10 +269,10 @@ def get_filepaths(directory):
     return file_paths  # Self-explanatory.
 
 def get_rnd_voxels(n):
-    files = filter(lambda x:x.endswith(".raw"), get_filepaths('~/data/ModelNet40/chair/train/'))
+    files = filter(lambda x:x.endswith(".raw"), get_filepaths(os.getenv('HOME') + '/data/ModelNet40/chair/train'))
     return np.random.choice(files, n, replace=False)
 
-def train(cost_f, nviews = 3, nvoxgrids=4):
+def train(cost_f, nviews = 3, nvoxgrids=4, res = 128):
     print "Training"
     npochs = 1000
     for i in range(npochs):
@@ -310,6 +310,6 @@ def main():
     cost, updates = second_order(rotation_matrices, views, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
     print "Compiling ConvNet"
     cost_f = function([views, rotation_matrices], cost, updates = updates)
-    train(cost_f, nviews = nviews, nvoxgrids = nvoxgrids)
+    train(cost_f, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
 
 main()
