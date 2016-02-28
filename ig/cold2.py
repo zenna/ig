@@ -26,7 +26,7 @@ from theano import function, config, shared
 import pickle
 
 # config.exception_verbosity='high'
-config.optimizer = 'None'
+# config.optimizer = 'None'
 
 def rand_rotation_matrix(deflection=1.0, randnums=None):
     """
@@ -232,7 +232,7 @@ def second_order(rotation_matrices, imagebatch, width = 134, height = 134, nstep
 
     # Put the different convnets into two channels
     net = {}
-    net['input'] = InputLayer((nvoxgrids, 1, width, height), input_var = first_img)
+    net['input'] = InputLayer((None, 1, width, height), input_var = first_img)
     net['conv1'] = ConvLayer(net['input'], num_filters=layers_per_layer*128, filter_size=7, stride=1)
     net['norm1'] = NormLayer(net['conv1'], alpha=0.0001) # caffe has alpha = alpha * pool_size
     filters = lasagne.layers.get_output(net['norm1'])
