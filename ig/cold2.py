@@ -200,10 +200,7 @@ def histo(x):
 
 plt.ion()
 
-width = 100
-height = 100
-res = 256
-nsteps = 100
+
 ## Example Data
 # x, y, z = np.ogrid[-10:10:complex(res), -10:10:complex(res), -10:10:complex(res)]
 # shape_params = np.sin(x*y*z)/(x*y*z)
@@ -220,14 +217,11 @@ def dist(a, b):
 # cost_f = function([shape_params, rotation_matrices, views], cost)
 # result = cost_f(voxel_data, r, imgdata)
 #
-def second_order(rotation_matrices, imagebatch, width = 128, height = 128, res = 128, nvoxgrids = 4):
+def second_order(rotation_matrices, imagebatch, width = 134, height = 134, nsteps = 100, res = 128, nvoxgrids = 4):
     """Creates a network which takes as input a image and returns a cost.
     Network extracts features of image to create shape params which are rendered.
     The similarity between the rendered image and the actual image is the cost
     """
-    width = 134
-    height = 134
-
     first_img = imagebatch[:,0,:,:]
     # nvoxgrids = imagebatch.shape[0]
     # height = imagebatch.shape[3]
@@ -246,52 +240,76 @@ def second_order(rotation_matrices, imagebatch, width = 128, height = 128, res =
     weights = shared(np.random.rand(1, res, layers_per_layer, res, res))
     accum = T.sum(stacks * weights, axis=2)
     # Relu
-    voxels = lasagne.nonlinearity.rectify(accum)
-        
-
-
-    net['reshaped'] = ReshapeLayer(net['norm1'], (nvoxgrids, layers_per_layer, res, width, height))
-    net['conv2'] = ConvLayer(net['norm1'], num_filters=256, filter_size=1, stride=1, nonlinearity=lasagne.nonlinearities.rectify)
-    net['drop6'] = DropoutLayer(net['conv2'], p=0.5)
-    output_layer = net['drop6']
-    output = lasagne.layers.get_output(output_layer)
-    voxels = output
-    # a1 = output[:,0:256]
-    # a2 = output[:, 256:256*2]
-    # a3 = output[:, 256*2:256*3]
-    #
-    # a1 = T.reshape(a1, (nvoxgrids, 256, 1, 1))
-    # a2 = T.reshape(a2, (nvoxgrids, 1, 256, 1))
-    # a3 = T.reshape(a3, (nvoxgrids, 1, 1, 256))
-    # voxels = a1 * a2 * a3
-    # voxels = T.reshape(output, (nvoxgrids, res, res, res))
+    voxels = lasagne.nonlinearities.rectify(accum)
     out = gen_img(voxels, rotation_matrices, width, height, nsteps, res)
-    cost = cost = dist(imagebatch, out)
+    loss = dist(imagebatch, out)
 
-    params = lasagne.layers.get_all_params(output_layer, trainable=True)
+    params = lasagne.layers.get_all_params(net['norm1'], trainable=True)
+    params.append(weights)
     network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
-    return cost, updates
+    return loss, network_updates
 
-rotation_matrices = T.tensor3()
-shape_params = T.tensor4()
-out = gen_img(shape_params, rotation_matrices, width, height, nsteps, res)
-print "Compiling"
-f = function([shape_params, rotation_matrices], out)
+import os
+def get_filepaths(directory):
+    """
+    This function will generate the file names in a directory
+    tree by walking the tree either top-down or bottom-up. For each
+    directory in the tree rooted at directory top (including top itself),
+    it yields a 3-tuple (dirpath, dirnames, filenames).
+    """
+    file_paths = []  # List which will store all of the full filepaths.
 
-voxel_data1 = load_voxels_binary("person_0089.raw", res, res, res)*10.0
-voxel_data2 = load_voxels_binary("foot.raw", res, res, res)*10.0
-voxel_data = np.stack([voxel_data1, voxel_data2])
-r = random_rotation_matrices(3)
-print "Rendering"
-imgdata = f(voxel_data, r)
+    # Walk the tree.
+    for root, directories, files in os.walk(directory):
+        for filename in files:
+            # Join the two strings in order to form the full filepath.
+            filepath = os.path.join(root, filename)
+            file_paths.append(filepath)  # Add it to the list.
 
-views = T.tensor4() # nbatches * width * height
-cost, updates = second_order(rotation_matrices, views, width = width, height = height, res = res)
-ff = function([views, rotation_matrices], cost, updates = updates)
+    return file_paths  # Self-explanatory.
 
-print "Training"
-nvoxgrids = 3
-npochs = 100
-for i in range(npochs):
+def get_rnd_voxels(n):
+    files = filter(lambda x:x.endswith(".raw"), get_filepaths('~/data/ModelNet40/chair/train/'))
+    return np.random.choice(files, n, replace=False)
 
-    c = ff(imgdata, r)
+def train(cost_f, nviews = 3, nvoxgrids=4):
+    print "Training"
+    npochs = 1000
+    for i in range(npochs):
+        print "epoch: ", i
+        filenames = get_rnd_voxels(nvoxgrids)
+        voxel_data = [load_voxels_binary(v, res, res, res)*10.0 for v in filenames]
+        r = random_rotation_matrices(nviews)
+        print "Rendering Training Data"
+        imgdata = render(voxeldata, r)
+        cost = cost_f(views, rotation_matrices)
+        print "cost is ", cost
+
+def main():
+    width = 134
+    height = 134
+    res = 128
+    nsteps = 100
+    nvoxgrids = 4
+    nviews = 5
+
+    rotation_matrices = T.tensor3()
+    shape_params = T.tensor4()
+    out = gen_img(shape_params, rotation_matrices, width, height, nsteps, res)
+    print "Compiling Render Function"
+    render = function([shape_params, rotation_matrices], out)
+
+    # voxel_data1 = load_voxels_binary("person_0089.raw", res, res, res)*10.0
+    # voxel_data2 = load_voxels_binary("foot.raw", res, res, res)*10.0
+    # voxel_data = np.stack([voxel_data1, voxel_data2])
+    # r = random_rotation_matrices(3)
+    # print "Rendering"
+    # imgdata = f(voxel_data, r)
+
+    views = T.tensor4() # nbatches * width * height
+    cost, updates = second_order(rotation_matrices, views, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
+    print "Compiling ConvNet"
+    cost_f = function([views, rotation_matrices], cost, updates = updates)
+    train(cost_f, nviews = nviews, nvoxgrids = nvoxgrids)
+
+main()
