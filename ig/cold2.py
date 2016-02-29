@@ -25,9 +25,14 @@ from theano import tensor as T
 from theano import function, config, shared
 import pickle
 
-# config.exception_verbosity='high'
-# config.optimizer = 'None'
+from theano.compile.nanguardmode import NanGuardMode
+# curr_mode = None
+curr_mode = NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
 
+
+# config.exception_verbosity='high'
+config.optimizer = 'fast_compile'
+# optimizer=fast_compile
 def rand_rotation_matrix(deflection=1.0, randnums=None):
     """
     Creates a random rotation matrix.
@@ -237,7 +242,7 @@ def second_order(rotation_matrices, imagebatch, width = 134, height = 134, nstep
     net['norm1'] = NormLayer(net['conv1'], alpha=0.0001) # caffe has alpha = alpha * pool_size
     filters = lasagne.layers.get_output(net['norm1'])
     stacks = T.reshape(filters, (nvoxgrids, res, layers_per_layer, res, res))
-    weights = shared(np.random.rand(1, res, layers_per_layer, res, res))
+    weights = shared(np.random.rand(1, res, layers_per_layer, res, res), broadcastable=(True, False, False, False, False))
     accum = T.sum(stacks * weights, axis=2)
     # Relu
     voxels = lasagne.nonlinearities.rectify(accum)
@@ -297,19 +302,13 @@ def main():
     shape_params = T.tensor4()
     out = gen_img(shape_params, rotation_matrices, width, height, nsteps, res)
     print "Compiling Render Function"
-    render = function([shape_params, rotation_matrices], out)
+    render = function([shape_params, rotation_matrices], out, mode=curr_mode)
 
-    # voxel_data1 = load_voxels_binary("person_0089.raw", res, res, res)*10.0
-    # voxel_data2 = load_voxels_binary("foot.raw", res, res, res)*10.0
-    # voxel_data = np.stack([voxel_data1, voxel_data2])
-    # r = random_rotation_matrices(3)
-    # print "Rendering"
-    # imgdata = f(voxel_data, r)
 
     views = T.tensor4() # nbatches * width * height
     cost, updates = second_order(rotation_matrices, views, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
     print "Compiling ConvNet"
-    cost_f = function([views, rotation_matrices], cost, updates = updates)
+    cost_f = function([views, rotation_matrices], cost, updates = updates, mode=curr_mode)
     train(cost_f, render, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
 
 main()
