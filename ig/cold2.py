@@ -32,7 +32,7 @@ import os
 
 
 # config.exception_verbosity='high'
-config.optimizer = 'fast_compile'
+# config.optimizer = 'fast_compile'
 # optimizer=fast_compile
 def rand_rotation_matrix(deflection=1.0, randnums=None):
     """
@@ -280,7 +280,7 @@ def train(cost_f, render, nviews = 3, nvoxgrids=4, res = 128):
         r = random_rotation_matrices(nviews)
         print "Rendering Training Data"
         imgdata = render(voxel_dataX, r)
-        cost, voxels, pds = cost_f(imgdata, r)
+        cost, voxels, pds = cost_f(imgdata[0], r)
         print "cost is ", cost
         print "voxels are"
         print "sum", np.sum(voxels)
@@ -299,11 +299,11 @@ out = gen_img(shape_params, rotation_matrices, width, height, nsteps, res)
 print "Compiling Render Function"
 render = function([shape_params, rotation_matrices], out, mode=curr_mode)
 
-#
-# views = T.tensor4() # nbatches * width * height
-# cost, voxels, params, pds, updates = second_order(rotation_matrices, views, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
-# print "Compiling ConvNet"
-# cost_f = function([views, rotation_matrices], [cost, voxels, pds], updates = updates, mode=curr_mode)
+
+views = T.tensor4() # nbatches * width * height
+cost, voxels, params, pds, updates = second_order(rotation_matrices, views, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
+print "Compiling ConvNet"
+cost_f = function([views, rotation_matrices], [cost, voxels, pds], updates = updates, mode=curr_mode)
 # train(cost_f, render, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
 
 # main()
