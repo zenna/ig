@@ -26,8 +26,8 @@ from theano import function, config, shared
 import pickle
 
 from theano.compile.nanguardmode import NanGuardMode
-# curr_mode = None
-curr_mode = NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
+curr_mode = None
+# curr_mode = NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
 
 
 # config.exception_verbosity='high'
@@ -238,21 +238,25 @@ def second_order(rotation_matrices, imagebatch, width = 134, height = 134, nstep
     # Put the different convnets into two channels
     net = {}
     net['input'] = InputLayer((None, 1, width, height), input_var = first_img)
-    net['conv1'] = ConvLayer(net['input'], num_filters=layers_per_layer*128, filter_size=7, stride=1)
-    net['norm1'] = NormLayer(net['conv1'], alpha=0.0001) # caffe has alpha = alpha * pool_size
-    filters = lasagne.layers.get_output(net['norm1'])
+    net['conv1'] = ConvLayer(net['input'], num_filters=layers_per_layer*128, filter_size=7, stride=1, nonlinearity = lasagne.nonlinearities.rectify)
+    # net['norm1'] = NormLayer(net['conv1'], alpha=0.0001) # caffe has alpha = alpha * pool_size
+    output_layer = net['conv1']
+    filters = lasagne.layers.get_output(output_layer)
     stacks = T.reshape(filters, (nvoxgrids, res, layers_per_layer, res, res))
-    weights = shared(np.random.rand(1, res, layers_per_layer, res, res), broadcastable=(True, False, False, False, False))
+    glu = lasagne.init.GlorotUniform('relu')
+    weights = shared(glu.sample((1, res, layers_per_layer, res, res)), broadcastable=(True, False, False, False, False))
     accum = T.sum(stacks * weights, axis=2)
     # Relu
-    voxels = lasagne.nonlinearities.rectify(accum)
+    # voxels = lasagne.nonlinearities.rectify(accum)
+    voxels = accum
     out = gen_img(voxels, rotation_matrices, width, height, nsteps, res)
-    loss = dist(imagebatch, out)
+    loss = dist(imagebatch, out) / (width * height * nvoxgrids * 4)
 
-    params = lasagne.layers.get_all_params(net['norm1'], trainable=True)
+    params = lasagne.layers.get_all_params(output_layer, trainable=True)
     params.append(weights)
+    pds = T.grad(loss, params[0])
     network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
-    return loss, network_updates
+    return loss, voxels, params, pds, network_updates
 
 import os
 def get_filepaths(directory):
@@ -287,8 +291,10 @@ def train(cost_f, render, nviews = 3, nvoxgrids=4, res = 128):
         r = random_rotation_matrices(nviews)
         print "Rendering Training Data"
         imgdata = render(voxel_data, r)
-        cost = cost_f(imgdata, r)
+        cost, voxels, pds = cost_f(imgdata, r)
         print "cost is ", cost
+        print "voxels are"
+        print "sum", np.sum(voxels)
 
 def main():
     width = 134
@@ -306,9 +312,9 @@ def main():
 
 
     views = T.tensor4() # nbatches * width * height
-    cost, updates = second_order(rotation_matrices, views, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
+    cost, voxels, params, pds, updates = second_order(rotation_matrices, views, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
     print "Compiling ConvNet"
-    cost_f = function([views, rotation_matrices], cost, updates = updates, mode=curr_mode)
+    cost_f = function([views, rotation_matrices], [cost, voxels, pds], updates = updates, mode=curr_mode)
     train(cost_f, render, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
 
-main()
+# main()
