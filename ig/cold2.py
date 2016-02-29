@@ -275,33 +275,34 @@ def train(cost_f, render, nviews = 3, nvoxgrids=4, res = 128):
         print "epoch: ", i
         filenames = get_rnd_voxels(nvoxgrids)
         voxel_data = [load_voxels_binary(v, res, res, res)*10.0 for v in filenames]
+        voxel_dataX = [np.array(v,dtype=config.floatX) for v in voxel_data]
         r = random_rotation_matrices(nviews)
         print "Rendering Training Data"
-        imgdata = render(voxel_data, r)
+        imgdata = render(voxel_dataX, r)
         cost, voxels, pds = cost_f(imgdata, r)
         print "cost is ", cost
         print "voxels are"
         print "sum", np.sum(voxels)
 
-def main():
-    width = 134
-    height = 134
-    res = 128
-    nsteps = 100
-    nvoxgrids = 4
-    nviews = 5
+# def main():
+width = 134
+height = 134
+res = 128
+nsteps = 100
+nvoxgrids = 4
+nviews = 5
 
-    rotation_matrices = T.tensor3()
-    shape_params = T.tensor4()
-    out = gen_img(shape_params, rotation_matrices, width, height, nsteps, res)
-    print "Compiling Render Function"
-    render = function([shape_params, rotation_matrices], out, mode=curr_mode)
+rotation_matrices = T.tensor3()
+shape_params = T.tensor4()
+out = gen_img(shape_params, rotation_matrices, width, height, nsteps, res)
+print "Compiling Render Function"
+render = function([shape_params, rotation_matrices], out, mode=curr_mode)
 
 
-    views = T.tensor4() # nbatches * width * height
-    cost, voxels, params, pds, updates = second_order(rotation_matrices, views, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
-    print "Compiling ConvNet"
-    cost_f = function([views, rotation_matrices], [cost, voxels, pds], updates = updates, mode=curr_mode)
-    train(cost_f, render, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
+views = T.tensor4() # nbatches * width * height
+cost, voxels, params, pds, updates = second_order(rotation_matrices, views, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
+print "Compiling ConvNet"
+cost_f = function([views, rotation_matrices], [cost, voxels, pds], updates = updates, mode=curr_mode)
+train(cost_f, render, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
 
 # main()
