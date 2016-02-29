@@ -112,7 +112,7 @@ def make_ro(r, raster_space, width, height):
     ndc_xyz = stack(ndc_space, width, height, 1.0)*0.5 # Change focal length
 
     # Put the origin farther along z-axis
-    ro = np.array([0,0,1.5])
+    ro = np.array([0,0,1.5], dtype=config.floatX)
 
     # Rotate both by same rotation matrix
     ro_t = T.dot(T.reshape(ro, (1,3)), r)
@@ -191,7 +191,7 @@ def gen_img(shape_params, rotation_matrix, width, height, nsteps, res):
     img = left_over
     pixels = T.reshape(img, (nvoxgrids, nmatrices, width, height))
     mask = t14>t04
-    return T.switch(t14>t04, pixels, T.ones_like(pixels))
+    return T.switch(t14>t04, pixels, T.ones_like(pixels)), rd, ro, tn_x, T.ones((nvoxgrids, nmatrices * width * height,)), orig, shape_params
 
 
 def load_voxels_binary(fname, width, height, depth, max_value=255.0):
@@ -238,6 +238,7 @@ def second_order(rotation_matrices, imagebatch, width = 134, height = 134, nstep
     # voxels = lasagne.nonlinearities.rectify(accum)
     voxels = accum
     out = gen_img(voxels, rotation_matrices, width, height, nsteps, res)
+    out = out[0]
     loss = dist(imagebatch, out) / (width * height * nvoxgrids * 4)
 
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
@@ -298,11 +299,11 @@ out = gen_img(shape_params, rotation_matrices, width, height, nsteps, res)
 print "Compiling Render Function"
 render = function([shape_params, rotation_matrices], out, mode=curr_mode)
 
-
-views = T.tensor4() # nbatches * width * height
-cost, voxels, params, pds, updates = second_order(rotation_matrices, views, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
-print "Compiling ConvNet"
-cost_f = function([views, rotation_matrices], [cost, voxels, pds], updates = updates, mode=curr_mode)
-train(cost_f, render, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
+#
+# views = T.tensor4() # nbatches * width * height
+# cost, voxels, params, pds, updates = second_order(rotation_matrices, views, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
+# print "Compiling ConvNet"
+# cost_f = function([views, rotation_matrices], [cost, voxels, pds], updates = updates, mode=curr_mode)
+# train(cost_f, render, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
 
 # main()
