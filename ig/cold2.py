@@ -28,6 +28,7 @@ import pickle
 from theano.compile.nanguardmode import NanGuardMode
 curr_mode = None
 # curr_mode = NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
+import os
 
 
 # config.exception_verbosity='high'
@@ -192,7 +193,6 @@ def gen_img(shape_params, rotation_matrix, width, height, nsteps, res):
     mask = t14>t04
     return T.switch(t14>t04, pixels, T.ones_like(pixels))
 
-from matplotlib import pylab as plt
 
 def load_voxels_binary(fname, width, height, depth, max_value=255.0):
     data = np.fromfile(fname, dtype='uint8')
@@ -203,25 +203,13 @@ def histo(x):
     n, bins, patches = plt.hist(x.flatten(), 500,range=(0.0001,1), normed=1, facecolor='green', alpha=0.75)
     plt.show()
 
-plt.ion()
+# from matplotlib import pylab as plt
+# plt.ion()
 
-
-## Example Data
-# x, y, z = np.ogrid[-10:10:complex(res), -10:10:complex(res), -10:10:complex(res)]
-# shape_params = np.sin(x*y*z)/(x*y*z)
-# shape_params = np.clip(shape_params,0,1)
-# shape_params = shape_params - np.min(shape_params) * (np.max(shape_params) - np.min(shape_params))
-
-
-#
 def dist(a, b):
     eps = 1e-9
     return T.sum(T.maximum(eps, (a - b)**2))
-#
-# cost = dist(views, out)
-# cost_f = function([shape_params, rotation_matrices, views], cost)
-# result = cost_f(voxel_data, r, imgdata)
-#
+
 def second_order(rotation_matrices, imagebatch, width = 134, height = 134, nsteps = 100, res = 128, nvoxgrids = 4):
     """Creates a network which takes as input a image and returns a cost.
     Network extracts features of image to create shape params which are rendered.
@@ -258,7 +246,6 @@ def second_order(rotation_matrices, imagebatch, width = 134, height = 134, nstep
     network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
     return loss, voxels, params, pds, network_updates
 
-import os
 def get_filepaths(directory):
     """
     This function will generate the file names in a directory
