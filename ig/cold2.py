@@ -210,7 +210,7 @@ def dist(a, b):
     eps = 1e-9
     return T.sum(T.maximum(eps, (a - b)**2))
 
-def second_order(rotation_matrices, imagebatch, width = 134, height = 134, nsteps = 100, res = 128, nvoxgrids = 4):
+def second_order(rotation_matrices, imagebatch, shape_params, width = 134, height = 134, nsteps = 100, res = 128, nvoxgrids = 4):
     """Creates a network which takes as input a image and returns a cost.
     Network extracts features of image to create shape params which are rendered.
     The similarity between the rendered image and the actual image is the cost
@@ -240,12 +240,14 @@ def second_order(rotation_matrices, imagebatch, width = 134, height = 134, nstep
     out = gen_img(voxels, rotation_matrices, width, height, nsteps, res)
     out = out[0]
     loss = dist(imagebatch, out) / (width * height * nvoxgrids * 4)
+    loss = dist(voxels, shape_params) / (res**3 * nvoxgrids)
 
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
     params.append(weights)
     pds = T.grad(loss, params[0])
-    network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
-    return loss, voxels, params, pds, network_updates
+    # network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
+    network_updates = lasagne.updates.adagrad(loss, params)
+    return loss, voxels, params, pds, out, network_updates
 
 def get_filepaths(directory):
     """
@@ -280,10 +282,29 @@ def train(cost_f, render, nviews = 3, nvoxgrids=4, res = 128):
         r = random_rotation_matrices(nviews)
         print "Rendering Training Data"
         imgdata = render(voxel_dataX, r)
-        cost, voxels, pds = cost_f(imgdata[0], r)
+        # cost, voxels, pds, out = cost_f(imgdata[0], r)
+        cost, voxels, pds = cost_f(imgdata[0], voxel_dataX)
+        print "Rendering Proposal"
+        # if i % 5 == 0:
+        #     drawimgbatch(imgdata[0])
+        #     # drawimgbatch(out)
+        #     drawimgbatch(render(voxels, r)[0])
         print "cost is ", cost
-        print "voxels are"
-        print "sum", np.sum(voxels)
+        print "sum of voxels:", np.sum(voxels)
+# from matplotlib import pylab as plt
+# plt.ion()
+
+def drawimgbatch(imbatch):
+    nvoxgrids = imbatch.shape[0]
+    nviews = imbatch.shape[1]
+    plt.figure()
+
+    for i in range(nvoxgrids):
+        for j in range(nviews):
+            plt.subplot(nvoxgrids, nviews, i * nviews + j + 1)
+            plt.imshow(imbatch[i,j])
+
+    plt.draw()
 
 # def main():
 width = 134
@@ -301,9 +322,11 @@ render = function([shape_params, rotation_matrices], out, mode=curr_mode)
 
 
 views = T.tensor4() # nbatches * width * height
-cost, voxels, params, pds, updates = second_order(rotation_matrices, views, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
+cost, voxels, params, pds, out, updates = second_order(rotation_matrices, views, shape_params, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
 print "Compiling ConvNet"
-cost_f = function([views, rotation_matrices], [cost, voxels, pds], updates = updates, mode=curr_mode)
-# train(cost_f, render, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
+# cost_f = function([views, rotation_matrices], [cost, voxels, pds, out], updates = updates, mode=curr_mode)
+cost_f = function([views, shape_params], [cost, voxels, pds], updates = updates, mode=curr_mode)
+
 
 # main()
+train(cost_f, render, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
