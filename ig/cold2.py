@@ -297,7 +297,7 @@ def get_rnd_voxels(n):
 ## Training
 ## ========
 
-def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, save_data = True, nepochs = 100, save_every = 1):
+def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, save_data = True, nepochs = 100, save_every = 1, load_params = True, params_file = None, fail_on_except = False):
     """Learn Parameters for Neural Network"""
     print "Training"
 
@@ -309,25 +309,43 @@ def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, sav
         print "Data will be saved to", full_dir_name
         os.mkdir(full_dir_name)
 
+    if load_params:
+        print "Loading Params", params_file
+        param_values = np.load(params_file)['param_values']
+        lasagne.layers.set_all_param_values(output_layer, param_values)
+
     for i in range(nepochs):
         print "epoch: ", i
-        filenames = get_rnd_voxels(nvoxgrids)
-        print filenames
-        voxel_data = [load_voxels_binary(v, res, res, res)*10.0 for v in filenames]
-        voxel_dataX = [np.array(v,dtype=config.floatX) for v in voxel_data]
-        r = random_rotation_matrices(nviews)
-        print "Rendering Training Data"
-        imgdata = render(voxel_dataX, r)
-        cost, voxels, pds = cost_f(imgdata[0], voxel_dataX)
-        print "cost is ", cost
-        print "sum of voxels:", np.sum(voxels)
-        if save_data and i % save_every == 0:
-            fname = "epoch%s" % (i)
-            full_fname = os.path.join(full_dir_name, fname)
-            param_values = lasagne.layers.get_all_param_values(output_layer)
-            np.savez_compressed(full_fname, cost, filenames, voxels, param_values)
+        try:
+            filenames = get_rnd_voxels(nvoxgrids)
+            print filenames
+            voxel_data = [load_voxels_binary(v, res, res, res)*10.0 for v in filenames]
+            voxel_dataX = [np.array(v,dtype=config.floatX) for v in voxel_data]
+            r = random_rotation_matrices(nviews)
+            print "Rendering Training Data"
+            imgdata = render(voxel_dataX, r)
+            cost, voxels, pds = cost_f(imgdata[0], voxel_dataX)
+            print "cost is ", cost
+            print "sum of voxels:", np.sum(voxels)
+            if save_data and i % save_every == 0:
+                fname = "epoch%s" % (i)
+                full_fname = os.path.join(full_dir_name, fname)
+                param_values = lasagne.layers.get_all_param_values(output_layer)
+                np.savez_compressed(full_fname, cost=cost, filenames=filenames, voxels=voxels, param_values=param_values)
+        except Exception as e:
+            if fail_on_except:
+                raise e
+            else:
+                print "Got error: ", e
+                print "continuing"
 
-
+def drawdata(fname):
+  data = np.load(fname)
+  data2 = data.items()
+  voxels = data2[3][1]
+  r = random_rotation_matrices(3)
+  img = render(voxels, r)[0]
+  drawimgbatch(img)
 
 def drawimgbatch(imbatch):
     from matplotlib import pylab as plt
@@ -343,26 +361,54 @@ def drawimgbatch(imbatch):
 
     plt.draw()
 
-# def main():
-width = 134
-height = 134
-res = 128
-nsteps = 100
-nvoxgrids = 8
-nviews = 1
+import sys, getopt
 
-rotation_matrices = T.tensor3()
-shape_params = T.tensor4()
-out = gen_img(shape_params, rotation_matrices, width, height, nsteps, res)
-print "Compiling Render Function"
-render = function([shape_params, rotation_matrices], out, mode=curr_mode)
+def handle_args(argv):
+    params_file = ''
+    outputfile = ''
+    try:
+        opts, args = getopt.getopt(argv,"hi:o:",["ifile=","ofile="])
+    except getopt.GetoptError:
+        print 'cold2.py -p <paramfile>'
+        sys.exit(2)
+    for opt, arg in opts:
+        if opt == '-h':
+            print 'cold2.py -p <paramfile>'
+            sys.exit()
+        elif opt in ("-p", "--params_file"):
+            params_file = arg
+    print "Param File is: ", params_file
+    return {'params_file' : params_file}
+
+def main(argv):
+    width = 134
+    height = 134
+    res = 128
+    nsteps = 100
+    nvoxgrids = 8
+    nviews = 1
+
+    ## Args
+    args = handle_args(argv)
+    params_file = args['params_file']
+    load_params = True
+    if params_file == '':
+        load_params = False
+
+    rotation_matrices = T.tensor3()
+    shape_params = T.tensor4()
+    out = gen_img(shape_params, rotation_matrices, width, height, nsteps, res)
+    print "Compiling Render Function"
+    render = function([shape_params, rotation_matrices], out, mode=curr_mode)
 
 
-views = T.tensor4() # nbatches * width * height
-cost, voxels, params, pds, out, output_layer, updates = second_order(rotation_matrices, views, shape_params, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
-print "Compiling ConvNet"
-# cost_f = function([views, rotation_matrices], [cost, voxels, pds, out], updates = updates, mode=curr_mode)
-cost_f = function([views, shape_params], [cost, voxels, pds], updates = updates, mode=curr_mode)
+    views = T.tensor4() # nbatches * width * height
+    cost, voxels, params, pds, out, output_layer, updates = second_order(rotation_matrices, views, shape_params, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
+    print "Compiling ConvNet"
+    # cost_f = function([views, rotation_matrices], [cost, voxels, pds, out], updates = updates, mode=curr_mode)
+    cost_f = function([views, shape_params], [cost, voxels, pds], updates = updates, mode=curr_mode)
 
-# main()
-train(cost_f, render, output_layer, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
+    train(cost_f, render, output_layer, nviews = nviews, nvoxgrids = nvoxgrids, res = res, load_params=load_params, params_file=params_file)
+
+if __name__ == "__main__":
+   main(sys.argv[1:])
