@@ -229,16 +229,16 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 134, heigh
     net = {}
     net['input'] = InputLayer((None, 1, width, height), input_var = first_img)
     net['conv2d1'] = ConvLayer(net['input'], num_filters=32, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
-    net['conv2d2'] = ConvLayer(net['conv2d1'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
+    net['conv2d2'] = ConvLayer(net['conv2d1'], num_filters=64, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
     net['conv2d3'] = ConvLayer(net['conv2d2'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
     # net['conv2d4'] = ConvLayer(net['conv2d3'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
 
     net['reshape'] = lasagne.layers.ReshapeLayer(net['conv2d3'], (nvoxgrids, 1, res, res, res,))
 
-    net['conv3d1'] = Conv3DDNNLayer(net['reshape'], 128, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify,flip_filters=False)
-    net['conv3d2'] = Conv3DDNNLayer(net['conv3d1'], 128, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify)
+    net['conv3d1'] = Conv3DDNNLayer(net['reshape'], 32, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify,flip_filters=False)
+    net['conv3d2'] = Conv3DDNNLayer(net['conv3d1'], 64, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify)
 
-    net['pooled'] = lasagne.layers.FeaturePoolLayer(net['conv3d2'],128, pool_function=T.mean)
+    net['pooled'] = lasagne.layers.FeaturePoolLayer(net['conv3d2'],64, pool_function=T.mean)
     net['voxels'] = lasagne.layers.ReshapeLayer(net['pooled'], (nvoxgrids, res, res, res))
     output_layer = net['voxels']
     voxels = lasagne.layers.get_output(output_layer)
