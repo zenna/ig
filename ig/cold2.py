@@ -253,9 +253,9 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 134, heigh
     net['reshape'] = lasagne.layers.ReshapeLayer(net['conv2d2'], (nvoxgrids, 1, res, res, res,))
 
     net['conv3d1'] = Conv3DDNNLayer(net['reshape'], 32, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify,flip_filters=False)
-    net['conv3d2'] = Conv3DDNNLayer(net['conv3d1'], 128, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify)
+    net['conv3d2'] = Conv3DDNNLayer(net['conv3d1'], 32, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify)
 
-    net['pooled'] = lasagne.layers.FeaturePoolLayer(net['conv3d2'],128)
+    net['pooled'] = lasagne.layers.FeaturePoolLayer(net['conv3d2'],32)
     net['voxels'] = lasagne.layers.ReshapeLayer(net['pooled'], (nvoxgrids, res, res, res))
     output_layer = net['voxels']
     voxels = lasagne.layers.get_output(output_layer)
@@ -363,4 +363,4 @@ cost_f = function([views, shape_params], [cost, voxels, pds], updates = updates,
 
 
 # main()
-# train(cost_f, render, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
+train(cost_f, render, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
