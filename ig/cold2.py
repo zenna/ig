@@ -263,8 +263,8 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 134, heigh
 
     # Training
     # network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
-    network_updates = lasagne.updates.adagrad(loss, params)
-    # network_updates = lasagne.updates.adam(loss, params, learning_rate=1e-4)
+    # network_updates = lasagne.updates.adagrad(loss, params)
+    network_updates = lasagne.updates.adam(loss, params, learning_rate=1e-4)
     # lr = 0.1
     # sh_lr = theano.shared(lasagne.utils.floatX(lr))
     # network_updates = lasagne.updates.momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
@@ -317,13 +317,7 @@ def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, sav
         r = random_rotation_matrices(nviews)
         print "Rendering Training Data"
         imgdata = render(voxel_dataX, r)
-        # cost, voxels, pds, out = cost_f(imgdata[0], r)
         cost, voxels, pds = cost_f(imgdata[0], voxel_dataX)
-        print "Rendering Proposal"
-        # if i % 5 == 0:
-        #     drawimgbatch(imgdata[0])
-        #     # drawimgbatch(out)
-        #     drawimgbatch(render(voxels, r)[0])
         print "cost is ", cost
         print "sum of voxels:", np.sum(voxels)
         if save_data and i % save_every == 0:
