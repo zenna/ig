@@ -262,8 +262,8 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 134, heigh
     pds = T.grad(loss, params[0])
 
     # Training
-    network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
-    # network_updates = lasagne.updates.adagrad(loss, params)
+    # network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
+    network_updates = lasagne.updates.adagrad(loss, params)
     # network_updates = lasagne.updates.adam(loss, params, learning_rate=1e-4)
     # lr = 0.1
     # sh_lr = theano.shared(lasagne.utils.floatX(lr))
@@ -332,10 +332,11 @@ def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, sav
             param_values = lasagne.layers.get_all_param_values(output_layer)
             np.savez_compressed(full_fname, cost, filenames, voxels, param_values)
 
-# from matplotlib import pylab as plt
-# plt.ion()
+
 
 def drawimgbatch(imbatch):
+    from matplotlib import pylab as plt
+    plt.ion()
     nvoxgrids = imbatch.shape[0]
     nviews = imbatch.shape[1]
     plt.figure()

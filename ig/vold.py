@@ -192,6 +192,14 @@ def histo(x):
     n, bins, patches = plt.hist(x.flatten(), 500,range=(0.0001,1), normed=1, facecolor='green', alpha=0.75)
     plt.show()
 
+def drawdata(fname):
+  data = np.load(fname)
+  data2 = data.items()
+  voxels = data2[3][1]
+  r = random_rotation_matrices(3)
+  img = render(voxels, r)[0]
+  drawimgbatch(img)
+
 plt.ion()
 
 width = 100
