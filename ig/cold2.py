@@ -1,6 +1,7 @@
 ## Volume Raycasting
 from theano import function, config, shared, printing
 import numpy as np
+import time
 # try:
 #     from mayavi import mlab
 # except:
@@ -368,4 +369,4 @@ print "Compiling ConvNet"
 cost_f = function([views, shape_params], [cost, voxels, pds], updates = updates, mode=curr_mode)
 
 # main()
-# train(cost_f, render, output_layer, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
+train(cost_f, render, output_layer, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
