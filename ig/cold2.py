@@ -33,7 +33,7 @@ import os
 
 
 # config.exception_verbosity='high'
-# config.optimizer = 'fast_compile'
+config.optimizer = 'fast_compile'
 # optimizer=fast_compile
 def rand_rotation_matrix(deflection=1.0, randnums=None):
     """
