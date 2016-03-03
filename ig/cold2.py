@@ -276,7 +276,7 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 134, heigh
     loss = lambda1 * loss1 + lambda2 * loss2
 
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
-    params.append(weights)
+    # params.append(weights)
     pds = T.grad(loss, params[0])
     # network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
     network_updates = lasagne.updates.adagrad(loss, params)
