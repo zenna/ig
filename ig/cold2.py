@@ -297,7 +297,7 @@ def get_rnd_voxels(n):
 ## Training
 ## ========
 
-def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, save_data = True, nepochs = 100, save_every = 1, load_params = True, params_file = None, fail_on_except = False):
+def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, save_data = True, nepochs = 1000, save_every = 1, load_params = True, params_file = None, fail_on_except = False):
     """Learn Parameters for Neural Network"""
     print "Training"
 
