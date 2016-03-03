@@ -367,7 +367,7 @@ def handle_args(argv):
     params_file = ''
     outputfile = ''
     try:
-        opts, args = getopt.getopt(argv,"hi:o:",["ifile=","ofile="])
+        opts, args = getopt.getopt(argv,"hp:",["params_file="])
     except getopt.GetoptError:
         print 'cold2.py -p <paramfile>'
         sys.exit(2)
