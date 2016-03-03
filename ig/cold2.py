@@ -341,8 +341,8 @@ def drawimgbatch(imbatch):
     plt.draw()
 
 # def main():
-width = 134
-height = 134
+width = 132
+height = 132
 res = 128
 nsteps = 100
 nvoxgrids = 4
