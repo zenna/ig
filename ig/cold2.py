@@ -244,7 +244,7 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 134, heigh
     # voxels = accum
 
     net = {}
-    net['input'] = InputLayer((None, 1, width+6, height+6), input_var = first_img)
+    net['input'] = InputLayer((None, 1, width, height), input_var = first_img)
     net['conv2d1'] = ConvLayer(net['input'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
     net['conv2d2'] = ConvLayer(net['conv2d1'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
     # net['conv2d3'] = ConvLayer(net['conv2d2'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
