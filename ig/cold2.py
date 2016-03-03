@@ -256,7 +256,7 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 134, heigh
     lambda1 = 1.0
     lambda2 = 2.0
     loss = lambda1 * loss1 + lambda2 * loss2
-    loss = loss1
+    # loss = loss1
 
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
     pds = T.grad(loss, params[0])
@@ -270,7 +270,7 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 134, heigh
     # network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
     # network_updates = lasagne.updates.momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
 
-    return loss, voxels, params, pds, out, output_layer, network_updates
+    return loss, voxels, params, pds, out, output_layer, network_updates, loss1, loss2
 
 def get_filepaths(directory):
     """
@@ -324,8 +324,10 @@ def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, sav
             r = random_rotation_matrices(nviews)
             print "Rendering Training Data"
             imgdata = render(voxel_dataX, r)
-            cost, voxels, pds = cost_f(imgdata[0], voxel_dataX)
+            cost, voxels, pds, loss1, loss2 = cost_f(imgdata[0], voxel_dataX)
             print "cost is ", cost
+            print "loss1 is", loss1
+            print "loss2 variance is", loss2
             print "sum of voxels:", np.sum(voxels)
             if save_data and i % save_every == 0:
                 fname = "epoch%s" % (i)
@@ -341,8 +343,7 @@ def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, sav
 
 def drawdata(fname):
   data = np.load(fname)
-  data2 = data.items()
-  voxels = data2[3][1]
+  voxels = data['voxels']
   r = random_rotation_matrices(3)
   img = render(voxels, r)[0]
   drawimgbatch(img)
@@ -403,10 +404,10 @@ def main(argv):
 
 
     views = T.tensor4() # nbatches * width * height
-    cost, voxels, params, pds, out, output_layer, updates = second_order(rotation_matrices, views, shape_params, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
+    cost, voxels, params, pds, out, output_layer, updates, loss1, loss2 = second_order(rotation_matrices, views, shape_params, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
     print "Compiling ConvNet"
     # cost_f = function([views, rotation_matrices], [cost, voxels, pds, out], updates = updates, mode=curr_mode)
-    cost_f = function([views, shape_params], [cost, voxels, pds], updates = updates, mode=curr_mode)
+    cost_f = function([views, shape_params], [cost, voxels, pds, loss1, loss2], updates = updates, mode=curr_mode)
 
     train(cost_f, render, output_layer, nviews = nviews, nvoxgrids = nvoxgrids, res = res, load_params=load_params, params_file=params_file)
 
