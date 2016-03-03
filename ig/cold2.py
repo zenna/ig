@@ -264,9 +264,10 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 134, heigh
     # Training
     # network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
     # network_updates = lasagne.updates.adagrad(loss, params)
-    network_updates = lasagne.updates.adam(loss, params, learning_rate=1e-4)
-    # lr = 0.1
-    # sh_lr = theano.shared(lasagne.utils.floatX(lr))
+    # network_updates = lasagne.updates.adam(loss, params, learning_rate=1e-4)
+    lr = 0.1
+    sh_lr = theano.shared(lasagne.utils.floatX(lr))
+    network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
     # network_updates = lasagne.updates.momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
 
     return loss, voxels, params, pds, out, output_layer, network_updates
