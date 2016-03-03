@@ -222,45 +222,26 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 134, heigh
     The similarity between the rendered image and the actual image is the cost
     """
     first_img = imagebatch[:,0,:,:]
-    # nvoxgrids = imagebatch.shape[0]
-    # height = imagebatch.shape[3]
-    # width = imagebatch.shape[2]
     first_img = T.reshape(first_img, (nvoxgrids,1,width,height))
     layers_per_layer = 4
-
-
-    # Put the different convnets into two channels
-    # net = {}
-    # net['input'] = InputLayer((None, 1, width, height), input_var = first_img)
-    # net['conv1'] = ConvLayer(net['input'], num_filters=layers_per_layer*128, filter_size=7, stride=1, nonlinearity = lasagne.nonlinearities.rectify)
-    # net['conv2'] = ConvLayer(net['conv1'], num_filters=4*128, filter_size=7, stride=1, nonlinearity = lasagne.nonlinearities.rectify)
-    # # net['norm1'] = NormLayer(net['conv1'], alpha=0.0001) # caffe has alpha = alpha * pool_size
-    # output_layer = net['conv1']
-    # filters = lasagne.layers.get_output(output_layer)
-    # stacks = T.reshape(filters, (nvoxgrids, res, layers_per_layer, res, res))
-    # glu = lasagne.init.GlorotUniform('relu')
-    # weights = shared(glu.sample((1, res, layers_per_layer, res, res)), broadcastable=(True, False, False, False, False))
-    # accum = T.sum(stacks * weights, axis=2)
-    # voxels = accum
 
     net = {}
     net['input'] = InputLayer((None, 1, width, height), input_var = first_img)
     net['conv2d1'] = ConvLayer(net['input'], num_filters=32, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
     net['conv2d2'] = ConvLayer(net['conv2d1'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
-    # net['conv2d3'] = ConvLayer(net['conv2d2'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
+    net['conv2d3'] = ConvLayer(net['conv2d2'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
     # net['conv2d4'] = ConvLayer(net['conv2d3'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
 
-    net['reshape'] = lasagne.layers.ReshapeLayer(net['conv2d2'], (nvoxgrids, 1, res, res, res,))
+    net['reshape'] = lasagne.layers.ReshapeLayer(net['conv2d3'], (nvoxgrids, 1, res, res, res,))
 
-    net['conv3d1'] = Conv3DDNNLayer(net['reshape'], 32, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify,flip_filters=False)
-    net['conv3d2'] = Conv3DDNNLayer(net['conv3d1'], 32, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify)
+    net['conv3d1'] = Conv3DDNNLayer(net['reshape'], 128, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify,flip_filters=False)
+    net['conv3d2'] = Conv3DDNNLayer(net['conv3d1'], 128, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify)
 
-    net['pooled'] = lasagne.layers.FeaturePoolLayer(net['conv3d2'],32)
+    net['pooled'] = lasagne.layers.FeaturePoolLayer(net['conv3d2'],128, pool_function=T.mean)
     net['voxels'] = lasagne.layers.ReshapeLayer(net['pooled'], (nvoxgrids, res, res, res))
     output_layer = net['voxels']
     voxels = lasagne.layers.get_output(output_layer)
-    # Relu
-    # voxels = lasagne.nonlinearities.rectify(accum)
+
     out = gen_img(voxels, rotation_matrices, width, height, nsteps, res)
     out = out[0]
     loss1 = dist(imagebatch, out) / (width * height * nvoxgrids * 4)
@@ -274,13 +255,20 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 134, heigh
     lambda1 = 1.0
     lambda2 = 2.0
     loss = lambda1 * loss1 + lambda2 * loss2
+    loss = loss1
 
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
-    # params.append(weights)
     pds = T.grad(loss, params[0])
-    # network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
-    network_updates = lasagne.updates.adagrad(loss, params)
-    return loss, voxels, params, pds, out, network_updates
+
+    # Training
+    network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
+    # network_updates = lasagne.updates.adagrad(loss, params)
+    # network_updates = lasagne.updates.adam(loss, params, learning_rate=1e-4)
+    # lr = 0.1
+    # sh_lr = theano.shared(lasagne.utils.floatX(lr))
+    # network_updates = lasagne.updates.momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
+
+    return loss, voxels, params, pds, out, output_layer, network_updates
 
 def get_filepaths(directory):
     """
@@ -301,13 +289,25 @@ def get_filepaths(directory):
     return file_paths  # Self-explanatory.
 
 def get_rnd_voxels(n):
-    files = filter(lambda x:x.endswith(".raw"), get_filepaths(os.getenv('HOME') + '/data/ModelNet40'))
+    files = filter(lambda x:x.endswith(".raw") and "train" in x, get_filepaths(os.getenv('HOME') + '/data/ModelNet40'))
     return np.random.choice(files, n, replace=False)
 
-def train(cost_f, render, nviews = 3, nvoxgrids=4, res = 128):
+## Training
+## ========
+
+def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, save_data = True, nepochs = 100, save_every = 0):
+    """Learn Parameters for Neural Network"""
     print "Training"
-    npochs = 10
-    for i in range(npochs):
+
+    # Create directory with timestamp
+    if save_data:
+        datadir = os.environ['DATADIR']
+        newdirname = str(time.time())
+        full_dir_name = os.path.join(datadir, newdirname)
+        print "Data will be saved to", full_dir_name
+        os.mkdir(full_dir_name)
+
+    for i in range(nepochs):
         print "epoch: ", i
         filenames = get_rnd_voxels(nvoxgrids)
         print filenames
@@ -325,6 +325,12 @@ def train(cost_f, render, nviews = 3, nvoxgrids=4, res = 128):
         #     drawimgbatch(render(voxels, r)[0])
         print "cost is ", cost
         print "sum of voxels:", np.sum(voxels)
+        if save_data and i % save_every == 0:
+            fname = "epoch%s" % (epoch)
+            full_fname = os.path.join(full_dir_name, fname)
+            param_values = lasagne.layers.get_all_param_values(output_layer)
+            np.savez_compressed(full_fname, cost, voxels, param_values)
+
 # from matplotlib import pylab as plt
 # plt.ion()
 
@@ -345,8 +351,8 @@ width = 132
 height = 132
 res = 128
 nsteps = 100
-nvoxgrids = 4
-nviews = 5
+nvoxgrids = 8
+nviews = 1
 
 rotation_matrices = T.tensor3()
 shape_params = T.tensor4()
@@ -356,11 +362,10 @@ render = function([shape_params, rotation_matrices], out, mode=curr_mode)
 
 
 views = T.tensor4() # nbatches * width * height
-cost, voxels, params, pds, out, updates = second_order(rotation_matrices, views, shape_params, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
+cost, voxels, params, pds, out, output_layer, updates = second_order(rotation_matrices, views, shape_params, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
 print "Compiling ConvNet"
 # cost_f = function([views, rotation_matrices], [cost, voxels, pds, out], updates = updates, mode=curr_mode)
 cost_f = function([views, shape_params], [cost, voxels, pds], updates = updates, mode=curr_mode)
 
-
 # main()
-train(cost_f, render, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
+# train(cost_f, render, output_layer, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
