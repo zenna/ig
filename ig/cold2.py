@@ -15,6 +15,7 @@ import theano.sandbox.cuda.dnn
 from lasagne.layers import InputLayer, DenseLayer, DropoutLayer
 if theano.sandbox.cuda.dnn.dnn_available():
     from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
+    from lasagne.layers.dnn import Conv3DDNNLayer, MaxPool3DDNNLayer
 else:
     from lasagne.layers import Conv2DLayer as ConvLayer
 
@@ -210,6 +211,11 @@ def dist(a, b):
     eps = 1e-9
     return T.sum(T.maximum(eps, (a - b)**2))
 
+def var(v, nvoxgrids, res):
+    mean_voxels = T.mean(v, axis=0)
+    eps = 1e-9
+    return T.sum(T.maximum(eps, (mean_voxels - v)**2)) / (nvoxgrids * res**3)
+
 def second_order(rotation_matrices, imagebatch, shape_params, width = 134, height = 134, nsteps = 100, res = 128, nvoxgrids = 4):
     """Creates a network which takes as input a image and returns a cost.
     Network extracts features of image to create shape params which are rendered.
@@ -224,23 +230,50 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 134, heigh
 
 
     # Put the different convnets into two channels
+    # net = {}
+    # net['input'] = InputLayer((None, 1, width, height), input_var = first_img)
+    # net['conv1'] = ConvLayer(net['input'], num_filters=layers_per_layer*128, filter_size=7, stride=1, nonlinearity = lasagne.nonlinearities.rectify)
+    # net['conv2'] = ConvLayer(net['conv1'], num_filters=4*128, filter_size=7, stride=1, nonlinearity = lasagne.nonlinearities.rectify)
+    # # net['norm1'] = NormLayer(net['conv1'], alpha=0.0001) # caffe has alpha = alpha * pool_size
+    # output_layer = net['conv1']
+    # filters = lasagne.layers.get_output(output_layer)
+    # stacks = T.reshape(filters, (nvoxgrids, res, layers_per_layer, res, res))
+    # glu = lasagne.init.GlorotUniform('relu')
+    # weights = shared(glu.sample((1, res, layers_per_layer, res, res)), broadcastable=(True, False, False, False, False))
+    # accum = T.sum(stacks * weights, axis=2)
+    # voxels = accum
+
     net = {}
-    net['input'] = InputLayer((None, 1, width, height), input_var = first_img)
-    net['conv1'] = ConvLayer(net['input'], num_filters=layers_per_layer*128, filter_size=7, stride=1, nonlinearity = lasagne.nonlinearities.rectify)
-    # net['norm1'] = NormLayer(net['conv1'], alpha=0.0001) # caffe has alpha = alpha * pool_size
-    output_layer = net['conv1']
-    filters = lasagne.layers.get_output(output_layer)
-    stacks = T.reshape(filters, (nvoxgrids, res, layers_per_layer, res, res))
-    glu = lasagne.init.GlorotUniform('relu')
-    weights = shared(glu.sample((1, res, layers_per_layer, res, res)), broadcastable=(True, False, False, False, False))
-    accum = T.sum(stacks * weights, axis=2)
+    net['input'] = InputLayer((None, 1, width+6, height+6), input_var = first_img)
+    net['conv2d1'] = ConvLayer(net['input'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
+    net['conv2d2'] = ConvLayer(net['conv2d1'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
+    net['conv2d3'] = ConvLayer(net['conv2d2'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
+    # net['conv2d4'] = ConvLayer(net['conv2d3'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
+
+    net['reshape'] = lasagne.layers.ReshapeLayer(net['conv2d3'], (nvoxgrids, 1, res, res, res,))
+
+    net['conv3d1'] = Conv3DDNNLayer(net['reshape'], 64, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify,flip_filters=False)
+    net['conv3d2'] = Conv3DDNNLayer(net['conv3d1'], 128, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify)
+
+    net['pooled'] = lasagne.layers.FeaturePoolLayer(net['conv3d2'],128)
+    net['voxels'] = lasagne.layers.ReshapeLayer(net['pooled'], (nvoxgrids, res, res, res))
+    output_layer = net['voxels']
+    voxels = lasagne.layers.get_output(output_layer)
     # Relu
     # voxels = lasagne.nonlinearities.rectify(accum)
-    voxels = accum
     out = gen_img(voxels, rotation_matrices, width, height, nsteps, res)
     out = out[0]
-    loss = dist(imagebatch, out) / (width * height * nvoxgrids * 4)
-    loss = dist(voxels, shape_params) / (res**3 * nvoxgrids)
+    loss1 = dist(imagebatch, out) / (width * height * nvoxgrids * 4)
+
+    # Voxel Variance loss
+    loss1 = dist(voxels, shape_params) / (res**3 * nvoxgrids)
+    proposal_variance = var(voxels, nvoxgrids, res)
+    data_variance = var(shape_params, nvoxgrids, res)
+    loss2 = dist(proposal_variance, data_variance)
+
+    lambda1 = 1.0
+    lambda2 = 2.0
+    loss = lambda1 * loss1 + lambda2 * loss2
 
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
     params.append(weights)
@@ -268,7 +301,7 @@ def get_filepaths(directory):
     return file_paths  # Self-explanatory.
 
 def get_rnd_voxels(n):
-    files = filter(lambda x:x.endswith(".raw"), get_filepaths(os.getenv('HOME') + '/data/ModelNet40/chair/train'))
+    files = filter(lambda x:x.endswith(".raw"), get_filepaths(os.getenv('HOME') + '/data/ModelNet40'))
     return np.random.choice(files, n, replace=False)
 
 def train(cost_f, render, nviews = 3, nvoxgrids=4, res = 128):
@@ -277,6 +310,7 @@ def train(cost_f, render, nviews = 3, nvoxgrids=4, res = 128):
     for i in range(npochs):
         print "epoch: ", i
         filenames = get_rnd_voxels(nvoxgrids)
+        print filenames
         voxel_data = [load_voxels_binary(v, res, res, res)*10.0 for v in filenames]
         voxel_dataX = [np.array(v,dtype=config.floatX) for v in voxel_data]
         r = random_rotation_matrices(nviews)
@@ -329,4 +363,4 @@ cost_f = function([views, shape_params], [cost, voxels, pds], updates = updates,
 
 
 # main()
-train(cost_f, render, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
+# train(cost_f, render, nviews = nviews, nvoxgrids = nvoxgrids, res = res)
