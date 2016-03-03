@@ -327,10 +327,10 @@ def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, sav
         print "cost is ", cost
         print "sum of voxels:", np.sum(voxels)
         if save_data and i % save_every == 0:
-            fname = "epoch%s" % (epoch)
+            fname = "epoch%s" % (i)
             full_fname = os.path.join(full_dir_name, fname)
             param_values = lasagne.layers.get_all_param_values(output_layer)
-            np.savez_compressed(full_fname, cost, voxels, param_values)
+            np.savez_compressed(full_fname, cost, filenames, voxels, param_values)
 
 # from matplotlib import pylab as plt
 # plt.ion()
