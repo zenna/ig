@@ -306,7 +306,7 @@ def get_rnd_voxels(n):
 
 def train(cost_f, render, nviews = 3, nvoxgrids=4, res = 128):
     print "Training"
-    npochs = 1000
+    npochs = 10
     for i in range(npochs):
         print "epoch: ", i
         filenames = get_rnd_voxels(nvoxgrids)
