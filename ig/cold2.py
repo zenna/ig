@@ -208,14 +208,20 @@ def histo(x):
 # from matplotlib import pylab as plt
 # plt.ion()
 
+# Mean square error
+def mse(a, b):
+    eps = 1e-9
+    return (T.maximum(eps, (a - b)**2)).mean()
+
+# Square error
 def dist(a, b):
     eps = 1e-9
     return T.sum(T.maximum(eps, (a - b)**2))
 
+# Mean distance to mean
 def var(v, nvoxgrids, res):
     mean_voxels = T.mean(v, axis=0)
-    eps = 1e-9
-    return T.sum(T.maximum(eps, (mean_voxels - v)**2)) / (nvoxgrids * res**3)
+    return mse(mean_voxels, v)
 
 def second_order(rotation_matrices, imagebatch, shape_params, width = 134, height = 134, nsteps = 100, res = 128, nvoxgrids = 4):
     """Creates a network which takes as input a image and returns a cost.
@@ -248,7 +254,7 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 134, heigh
     loss1 = dist(imagebatch, out) / (width * height * nvoxgrids * 4)
 
     # Voxel Variance loss
-    loss1 = dist(voxels, shape_params) / (res**3 * nvoxgrids)
+    loss1 = mse(voxels, shape_params)
     proposal_variance = var(voxels, nvoxgrids, res)
     data_variance = var(shape_params, nvoxgrids, res)
     loss2 = dist(proposal_variance, data_variance)
@@ -256,7 +262,6 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 134, heigh
     lambda1 = 1.0
     lambda2 = 2.0
     loss = lambda1 * loss1 + lambda2 * loss2
-    # loss = loss1
 
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
     pds = T.grad(loss, params[0])
@@ -298,7 +303,7 @@ def get_rnd_voxels(n):
 ## Training
 ## ========
 
-def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, save_data = True, nepochs = 1000, save_every = 1, load_params = True, params_file = None, fail_on_except = False):
+def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, save_data = True, nepochs = 10000, save_every = 10, load_params = True, params_file = None, fail_on_except = False):
     """Learn Parameters for Neural Network"""
     print "Training"
 
