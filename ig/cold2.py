@@ -170,13 +170,10 @@ def gen_img(shape_params, rotation_matrix, width, height, nsteps, res):
     t04 = t04*1.001
     t14 = t14*0.999
 
-    # img = T.zeros(width * height)
     nvoxgrids = shape_params.shape[0]
     left_over = T.ones((nvoxgrids, nmatrices * width * height,))
     step_size = (t14 - t04)/nsteps
     orig = T.reshape(ro, (nmatrices, 1, 1, 3)) + rd * T.reshape(t04,(nmatrices, width, height, 1))
-    # step_size = T.reshape(step_size, (width, height, 1))
-    # step_size_flat = step_size.flatten()
     xres = yres = zres = res
 
     orig = T.reshape(orig, (nmatrices * width * height, 3))
@@ -208,9 +205,6 @@ def histo(x):
     n, bins, patches = plt.hist(x.flatten(), 500,range=(0.0001,1), normed=1, facecolor='green', alpha=0.75)
     plt.show()
 
-# from matplotlib import pylab as plt
-# plt.ion()
-
 # Mean square error
 def mse(a, b):
     eps = 1e-9
@@ -240,10 +234,7 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 134, heigh
     net['conv2d1'] = batch_norm(ConvLayer(net['input'], num_filters=32, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
     net['conv2d2'] = batch_norm(ConvLayer(net['conv2d1'], num_filters=64, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
     net['conv2d3'] = batch_norm(ConvLayer(net['conv2d2'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
-    # net['conv2d4'] = batch_norm(ConvLayer(net['conv2d3'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
-
     net['reshape'] = lasagne.layers.ReshapeLayer(net['conv2d3'], (nvoxgrids, 1, res, res, res,))
-
     net['conv3d1'] = batch_norm(Conv3DDNNLayer(net['reshape'], 32, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ,flip_filters=False))
     net['conv3d2'] = batch_norm(Conv3DDNNLayer(net['conv3d1'], 32, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
 
@@ -272,12 +263,12 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 134, heigh
     # Training
     # network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
     # network_updates = lasagne.updates.adagrad(loss, params)
-    network_updates = lasagne.updates.adamax(loss, params)
+    # network_updates = lasagne.updates.adamax(loss, params)
     # network_updates = lasagne.updates.adam(loss, params, learning_rate=1e-4)
-    # lr = 0.1
-    # sh_lr = theano.shared(lasagne.utils.floatX(lr))
+    lr = 0.1
+    sh_lr = theano.shared(lasagne.utils.floatX(lr))
+    network_updates = lasagne.updates.momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
     # network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
-    # network_updates = lasagne.updates.momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
 
     return loss, voxels, params, pds, out, output_layer, network_updates, loss1, loss2
 
