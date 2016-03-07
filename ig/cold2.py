@@ -34,7 +34,7 @@ import os
 
 
 # config.exception_verbosity='high'
-# config.optimizer = 'fast_compile'
+config.optimizer = 'fast_compile'
 # optimizer=fast_compile
 def rand_rotation_matrix(deflection=1.0, randnums=None):
     """
@@ -234,15 +234,15 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 134, heigh
 
     net = {}
     net['input'] = InputLayer((None, 1, width, height), input_var = first_img)
-    net['conv2d1'] = ConvLayer(net['input'], num_filters=32, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
-    net['conv2d2'] = ConvLayer(net['conv2d1'], num_filters=64, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
-    net['conv2d3'] = ConvLayer(net['conv2d2'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
-    # net['conv2d4'] = ConvLayer(net['conv2d3'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify)
+    net['conv2d1'] = batch_normal(ConvLayer(net['input'], num_filters=32, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
+    net['conv2d2'] = batch_normal(ConvLayer(net['conv2d1'], num_filters=64, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
+    net['conv2d3'] = batch_normal(ConvLayer(net['conv2d2'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
+    # net['conv2d4'] = batch_normal(ConvLayer(net['conv2d3'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
 
     net['reshape'] = lasagne.layers.ReshapeLayer(net['conv2d3'], (nvoxgrids, 1, res, res, res,))
 
-    net['conv3d1'] = Conv3DDNNLayer(net['reshape'], 32, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify,flip_filters=False)
-    net['conv3d2'] = Conv3DDNNLayer(net['conv3d1'], 32, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify)
+    net['conv3d1'] = batch_normal(Conv3DDNNLayer(net['reshape'], 32, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ,flip_filters=False))
+    net['conv3d2'] = batch_normal(Conv3DDNNLayer(net['conv3d1'], 32, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
 
     net['pooled'] = lasagne.layers.FeaturePoolLayer(net['conv3d2'],32, pool_function=T.mean)
     net['voxels'] = lasagne.layers.ReshapeLayer(net['pooled'], (nvoxgrids, res, res, res))
@@ -392,7 +392,7 @@ def main(argv):
     height = 134
     res = 128
     nsteps = 100
-    nvoxgrids = 8
+    nvoxgrids = 32
     nviews = 1
 
     ## Args
