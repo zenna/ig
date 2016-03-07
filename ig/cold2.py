@@ -303,7 +303,7 @@ def get_rnd_voxels(n):
 ## Training
 ## ========
 
-def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, save_data = True, nepochs = 10000, save_every = 10, load_params = True, params_file = None, fail_on_except = False):
+def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, save_data = True, nepochs = 100, save_every = 10, load_params = True, params_file = None, fail_on_except = False):
     """Learn Parameters for Neural Network"""
     print "Training"
 
@@ -395,6 +395,8 @@ def main(argv):
     nvoxgrids = 32
     nviews = 1
 
+    nepochs = 100
+
     ## Args
     args = handle_args(argv)
     params_file = args['params_file']
@@ -415,7 +417,7 @@ def main(argv):
     # cost_f = function([views, rotation_matrices], [cost, voxels, pds, out], updates = updates, mode=curr_mode)
     cost_f = function([views, shape_params], [cost, voxels, pds, loss1, loss2], updates = updates, mode=curr_mode)
 
-    train(cost_f, render, output_layer, nviews = nviews, nvoxgrids = nvoxgrids, res = res, load_params=load_params, params_file=params_file)
+    train(cost_f, render, output_layer, nviews = nviews, nvoxgrids = nvoxgrids, res = res, load_params=load_params, params_file=params_file, nepochs = nepochs)
 
 if __name__ == "__main__":
    main(sys.argv[1:])
