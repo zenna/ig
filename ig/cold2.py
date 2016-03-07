@@ -386,7 +386,7 @@ def main(argv):
     height = 134
     res = 128
     nsteps = 100
-    nvoxgrids = 32
+    nvoxgrids = 16
     nviews = 1
 
     nepochs = 100
