@@ -9,7 +9,6 @@ class Conv2D3DLayer(BaseConvLayer):
                  b=init.Constant(0.), nonlinearity=nonlinearities.rectify,
                  flip_filters=False, **kwargs):
         stride=(1, 1, 1)
-        pad = 0
         super(Conv2D3DLayer, self).__init__(incoming, num_filters,
                                              filter_size, stride, pad,
                                              untie_biases, W, b, nonlinearity,
