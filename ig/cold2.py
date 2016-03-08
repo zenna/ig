@@ -2,13 +2,10 @@
 from theano import function, config, shared, printing
 import numpy as np
 import time
-try:
-    from mayavi import mlab
-except:
-    print "couldnt import"
-from mayavi import mlab
 
-
+# Internal Imports
+from ig.io import *
+from ig.util import *
 ## Extract features from an image
 import lasagne
 import theano
@@ -22,8 +19,6 @@ else:
     from conv3d import Conv2D3DLayer as Conv3DLayer
 
 from lasagne.layers import batch_norm
-
-
 from lasagne.layers import MaxPool2DLayer as PoolLayer
 from lasagne.layers import LocalResponseNormalization2DLayer as NormLayer
 from lasagne.utils import floatX
@@ -35,56 +30,6 @@ from theano.compile.nanguardmode import NanGuardMode
 curr_mode = None
 # curr_mode = NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
 import os
-
-
-# config.exception_verbosity='high'
-# config.optimizer = 'fast_compile'
-# optimizer=fast_compile
-def rand_rotation_matrix(deflection=1.0, randnums=None):
-    """
-    Creates a random rotation matrix.
-
-    deflection: the magnitude of the rotation. For 0, no rotation; for 1, competely random
-    rotation. Small deflection => small perturbation.
-    randnums: 3 random numbers in the range [0, 1]. If `None`, they will be auto-generated.
-    """
-    # from http://www.realtimerendering.com/resources/GraphicsGems/gemsiii/rand_rotation.c
-
-    if randnums is None:
-        randnums = np.random.uniform(size=(3,))
-
-    theta, phi, z = randnums
-
-    theta = theta * 2.0*deflection*np.pi  # Rotation about the pole (Z).
-    phi = phi * 2.0*np.pi  # For direction of pole deflection.
-    z = z * 2.0*deflection  # For magnitude of pole deflection.
-
-    # Compute a vector V used for distributing points over the sphere
-    # via the reflection I - V Transpose(V).  This formulation of V
-    # will guarantee that if x[1] and x[2] are uniformly distributed,
-    # the reflected points will be uniform on the sphere.  Note that V
-    # has length sqrt(2) to eliminate the 2 in the Householder matrix.
-
-    r = np.sqrt(z)
-    Vx, Vy, Vz = V = (
-        np.sin(phi) * r,
-        np.cos(phi) * r,
-        np.sqrt(2.0 - z)
-        )
-
-    st = np.sin(theta)
-    ct = np.cos(theta)
-
-    R = np.array(((ct, st, 0), (-st, ct, 0), (0, 0, 1)))
-
-    # Construct the rotation matrix  ( V Transpose(V) - I ) R.
-
-    M = (np.outer(V, V) - np.eye(3)).dot(R)
-    return np.array(M, dtype=config.floatX)
-
-# n random matrices
-def random_rotation_matrices(n):
-    return np.stack([rand_rotation_matrix() for i in range(n)])
 
 # Genereate values in raster space, x[i,j] = [i,j]
 def gen_fragcoords(width, height):
@@ -100,6 +45,9 @@ def gen_fragcoords(width, height):
 def stack(intensor, width, height, scalar):
     scalars = np.ones([width, height, 1], dtype=config.floatX) * scalar
     return np.concatenate([intensor, scalars], axis=2)
+
+def switch(cond, a, b):
+    return cond*a + (1-cond)*b
 
 def make_ro(r, raster_space, width, height):
     """Symbolically render rays starting with raster_space according to geometry
@@ -133,9 +81,6 @@ def make_ro(r, raster_space, width, height):
     unnorm_rd = ndc_t - T.reshape(ro_t, (nmatrices,1,1,3))
     rd = unnorm_rd / T.reshape(unnorm_rd.norm(2, axis=3), (nmatrices, width, height, 1))
     return rd, ro_t
-
-def switch(cond, a, b):
-    return cond*a + (1-cond)*b
 
 def gen_img(shape_params, rotation_matrix, width, height, nsteps, res):
     raster_space = gen_fragcoords(width, height)
@@ -196,16 +141,6 @@ def gen_img(shape_params, rotation_matrix, width, height, nsteps, res):
     mask = t14>t04
     return T.switch(t14>t04, pixels, T.ones_like(pixels)), rd, ro, tn_x, T.ones((nvoxgrids, nmatrices * width * height,)), orig, shape_params
 
-
-def load_voxels_binary(fname, width, height, depth, max_value=255.0):
-    data = np.fromfile(fname, dtype='uint8')
-    return np.reshape(data, (width, height, depth))/float(max_value)
-
-def histo(x):
-    # the histogram of the data
-    n, bins, patches = plt.hist(x.flatten(), 500,range=(0.0001,1), normed=1, facecolor='green', alpha=0.75)
-    plt.show()
-
 # Mean square error
 def mse(a, b):
     eps = 1e-9
@@ -228,7 +163,6 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 138, heigh
     """
     first_img = imagebatch[:,0,:,:]
     first_img = T.reshape(first_img, (nvoxgrids,1,width,height))
-    layers_per_layer = 4
 
     net = {}
     net['input'] = InputLayer((None, 1, width, height), input_var = first_img)
@@ -242,11 +176,9 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 138, heigh
     net['pooled'] = lasagne.layers.FeaturePoolLayer(net['conv3d2'],4, pool_function=T.mean)
     net['voxels'] = lasagne.layers.ReshapeLayer(net['pooled'], (nvoxgrids, res, res, res))
     output_layer = net['voxels']
+    outputs = {}
     voxels = lasagne.layers.get_output(output_layer)
-
-    out = gen_img(voxels, rotation_matrices, width, height, nsteps, res)
-    out = out[0]
-    loss1 = dist(imagebatch, out) / (width * height * nvoxgrids * 4)
+    intermediate_outputs = {key : lasagne.layers.get_output(net[key]) for key in net.keys()}
 
     # Voxel Variance loss
     loss1 = mse(voxels, shape_params)
@@ -254,12 +186,13 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 138, heigh
     data_variance = var(shape_params, nvoxgrids, res)
     loss2 = dist(proposal_variance, data_variance)
 
-    lambda1 = 1.0
+    lambda1 = 1.
     lambda2 = 2.0
     loss = lambda1 * loss1 + lambda2 * loss2
 
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
-    pds = T.grad(loss, params[0])
+    # grads = {key + '_grad' : T.grad(loss, params[0])}=
+    #  [i.shape for i in lasagne.layers.get_all_param_values(net['conv2d1')
 
     # Training
     # network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
@@ -270,30 +203,22 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 138, heigh
     sh_lr = theano.shared(lasagne.utils.floatX(lr))
     network_updates = lasagne.updates.momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
     # network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
+    outputs.update(intermediate_outputs)
+    outputs.update({'loss1': loss1})
+    outputs.update({'loss2': loss2})
+    outputs.update({'loss': loss})
+    outputs.update({'voxels': voxels})
 
-    return loss, voxels, params, pds, out, output_layer, network_updates, loss1, loss2
+    return outputs, net, output_layer, network_updates
 
-def get_filepaths(directory):
-    """
-    This function will generate the file names in a directory
-    tree by walking the tree either top-down or bottom-up. For each
-    directory in the tree rooted at directory top (including top itself),
-    it yields a 3-tuple (dirpath, dirnames, filenames).
-    """
-    file_paths = []  # List which will store all of the full filepaths.
+def build_conv_net(views, shape_params, outputs, selected_outputs, updates, mode = curr_mode):
+    outputs_list = [outputs[so] for so in selected_outputs]
+    return function([views, shape_params], outputs_list, updates = updates, mode=mode)
 
-    # Walk the tree.
-    for root, directories, files in os.walk(directory):
-        for filename in files:
-            # Join the two strings in order to form the full filepath.
-            filepath = os.path.join(root, filename)
-            file_paths.append(filepath)  # Add it to the list.
-
-    return file_paths  # Self-explanatory.
-
-def get_rnd_voxels(n):
-    files = filter(lambda x:x.endswith(".raw") and "train" in x, get_filepaths(os.getenv('HOME') + '/data/ModelNet40'))
-    return np.random.choice(files, n, replace=False)
+def load_params():
+    print "Loading Params", params_file
+    param_values = np.load(params_file)['param_values']
+    lasagne.layers.set_all_param_values(output_layer, param_values)
 
 ## Training
 ## ========
@@ -309,7 +234,6 @@ def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, sav
         full_dir_name = os.path.join(datadir, newdirname)
         print "Data will be saved to", full_dir_name
         os.mkdir(full_dir_name)
-
     if load_params:
         print "Loading Params", params_file
         param_values = np.load(params_file)['param_values']
@@ -322,14 +246,14 @@ def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, sav
             print filenames
             voxel_data = [load_voxels_binary(v, res, res, res)*10.0 for v in filenames]
             voxel_dataX = [np.array(v,dtype=config.floatX) for v in voxel_data]
-            r = random_rotation_matrices(nviews)
+            r = rand_rotation_matrices(nviews)
             print "Rendering Training Data"
             imgdata = render(voxel_dataX, r)
             print "Computing Cost"
-            cost, voxels, pds, loss1, loss2 = cost_f(imgdata[0], voxel_dataX)
+            cost, voxels, pds, loss1, loss2, intermediate_outputs = cost_f(imgdata[0], voxel_dataX)
             print "cost is ", cost
             print "loss1 is", loss1
-            print "loss2 variance is", loss2
+            print "loss2, intermediate_outputs variance is", loss2, intermediate_outputs
             print "sum of voxels:", np.sum(voxels)
             if save_data and i % save_every == 0:
                 fname = "epoch%s" % (i)
@@ -343,46 +267,6 @@ def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, sav
                 print "Got error: ", e
                 print "continuing"
 
-def drawdata(fname):
-  data = np.load(fname)
-  voxels = data['voxels']
-  r = random_rotation_matrices(3)
-  img = render(voxels, r)[0]
-  drawimgbatch(img)
-
-def drawimgbatch(imbatch):
-    from matplotlib import pylab as plt
-    plt.ion()
-    nvoxgrids = imbatch.shape[0]
-    nviews = imbatch.shape[1]
-    plt.figure()
-
-    for i in range(nvoxgrids):
-        for j in range(nviews):
-            plt.subplot(nvoxgrids, nviews, i * nviews + j + 1)
-            plt.imshow(imbatch[i,j])
-
-    plt.draw()
-
-import sys, getopt
-
-def handle_args(argv):
-    params_file = ''
-    outputfile = ''
-    try:
-        opts, args = getopt.getopt(argv,"hp:",["params_file="])
-    except getopt.GetoptError:
-        print 'cold2.py -p <paramfile>'
-        sys.exit(2)
-    for opt, arg in opts:
-        if opt == '-h':
-            print 'cold2.py -p <paramfile>'
-            sys.exit()
-        elif opt in ("-p", "--params_file"):
-            params_file = arg
-    print "Param File is: ", params_file
-    return {'params_file' : params_file}
-
 def main(argv):
     width = 138
     height = 138
@@ -390,7 +274,6 @@ def main(argv):
     nsteps = 100
     nvoxgrids = 8
     nviews = 1
-
     nepochs = 100
 
     ## Args
@@ -406,13 +289,10 @@ def main(argv):
     print "Compiling Render Function"
     render = function([shape_params, rotation_matrices], out, mode=curr_mode)
 
-
     views = T.tensor4() # nbatches * width * height
-    cost, voxels, params, pds, out, output_layer, updates, loss1, loss2 = second_order(rotation_matrices, views, shape_params, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
-    print "Compiling ConvNet"
-    # cost_f = function([views, rotation_matrices], [cost, voxels, pds, out], updates = updates, mode=curr_mode)
-    cost_f = function([views, shape_params], [cost, voxels, pds, loss1, loss2], updates = updates, mode=curr_mode)
-
+    outputs, net, output_layer, network_updates = second_order(rotation_matrices, views, shape_params, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
+    selected_outputs = ['loss', 'loss1', 'loss2', 'voxels'] + intermediate_outputs.keys()
+    cost_f = build_conv_net(views, shape_params, outputs, selected_outputs, updates)
     # train(cost_f, render, output_layer, nviews = nviews, nvoxgrids = nvoxgrids, res = res, load_params=load_params, params_file=params_file, nepochs = nepochs)
 
 # if __name__ == "__main__":
