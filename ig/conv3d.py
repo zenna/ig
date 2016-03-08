@@ -4,15 +4,16 @@ from lasagne import init
 from lasagne import nonlinearities
 
 class Conv2D3DLayer(BaseConvLayer):
-    def __init__(self, incoming, num_filters, filter_size, pad=0,
+    def __init__(self, incoming, num_filters, filter_size,
                  untie_biases=False, W=init.GlorotUniform(),
                  b=init.Constant(0.), nonlinearity=nonlinearities.rectify,
-                 flip_filters=False, **kwargs):
+                 flip_filters=False):
         stride=(1, 1, 1)
+        pad = 0
         super(Conv2D3DLayer, self).__init__(incoming, num_filters,
                                              filter_size, stride, pad,
                                              untie_biases, W, b, nonlinearity,
-                                             flip_filters, n=3, **kwargs)
+                                             flip_filters, n=3)
 
     def convolve(self, input, **kwargs):
         # Conv3d expects input  [n_images, depth, channels, height, width]

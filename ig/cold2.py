@@ -2,11 +2,11 @@
 from theano import function, config, shared, printing
 import numpy as np
 import time
-# try:
-#     from mayavi import mlab
-# except:
-#     print "couldnt import"
-# from mayavi import mlab
+try:
+    from mayavi import mlab
+except:
+    print "couldnt import"
+from mayavi import mlab
 
 
 ## Extract features from an image
@@ -38,7 +38,7 @@ import os
 
 
 # config.exception_verbosity='high'
-config.optimizer = 'fast_compile'
+# config.optimizer = 'fast_compile'
 # optimizer=fast_compile
 def rand_rotation_matrix(deflection=1.0, randnums=None):
     """
@@ -221,7 +221,7 @@ def var(v, nvoxgrids, res):
     mean_voxels = T.mean(v, axis=0)
     return mse(mean_voxels, v)
 
-def second_order(rotation_matrices, imagebatch, shape_params, width = 134, height = 134, nsteps = 100, res = 128, nvoxgrids = 4):
+def second_order(rotation_matrices, imagebatch, shape_params, width = 138, height = 138, nsteps = 100, res = 128, nvoxgrids = 4):
     """Creates a network which takes as input a image and returns a cost.
     Network extracts features of image to create shape params which are rendered.
     The similarity between the rendered image and the actual image is the cost
@@ -234,12 +234,12 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 134, heigh
     net['input'] = InputLayer((None, 1, width, height), input_var = first_img)
     net['conv2d1'] = batch_norm(ConvLayer(net['input'], num_filters=32, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
     net['conv2d2'] = batch_norm(ConvLayer(net['conv2d1'], num_filters=64, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
-    net['conv2d3'] = batch_norm(ConvLayer(net['conv2d2'], num_filters=128, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
-    net['reshape'] = lasagne.layers.ReshapeLayer(net['conv2d3'], (nvoxgrids, 1, res, res, res,))
-    net['conv3d1'] = batch_norm(Conv3DLayer(net['reshape'], 32, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ,flip_filters=False))
-    net['conv3d2'] = batch_norm(Conv3DLayer(net['conv3d1'], 32, (3,3,3), pad=1,nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
+    net['conv2d3'] = batch_norm(ConvLayer(net['conv2d2'], num_filters=132, filter_size=3, nonlinearity = lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
+    net['reshape'] = lasagne.layers.ReshapeLayer(net['conv2d3'], (nvoxgrids, 1, 132, 132, 132,))
+    net['conv3d1'] = batch_norm(Conv3DLayer(net['reshape'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ,flip_filters=False))
+    net['conv3d2'] = batch_norm(Conv3DLayer(net['conv3d1'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
 
-    net['pooled'] = lasagne.layers.FeaturePoolLayer(net['conv3d2'],32, pool_function=T.mean)
+    net['pooled'] = lasagne.layers.FeaturePoolLayer(net['conv3d2'],4, pool_function=T.mean)
     net['voxels'] = lasagne.layers.ReshapeLayer(net['pooled'], (nvoxgrids, res, res, res))
     output_layer = net['voxels']
     voxels = lasagne.layers.get_output(output_layer)
@@ -325,6 +325,7 @@ def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, sav
             r = random_rotation_matrices(nviews)
             print "Rendering Training Data"
             imgdata = render(voxel_dataX, r)
+            print "Computing Cost"
             cost, voxels, pds, loss1, loss2 = cost_f(imgdata[0], voxel_dataX)
             print "cost is ", cost
             print "loss1 is", loss1
@@ -383,11 +384,11 @@ def handle_args(argv):
     return {'params_file' : params_file}
 
 def main(argv):
-    width = 134
-    height = 134
+    width = 138
+    height = 138
     res = 128
     nsteps = 100
-    nvoxgrids = 16
+    nvoxgrids = 8
     nviews = 1
 
     nepochs = 100
@@ -412,7 +413,7 @@ def main(argv):
     # cost_f = function([views, rotation_matrices], [cost, voxels, pds, out], updates = updates, mode=curr_mode)
     cost_f = function([views, shape_params], [cost, voxels, pds, loss1, loss2], updates = updates, mode=curr_mode)
 
-    train(cost_f, render, output_layer, nviews = nviews, nvoxgrids = nvoxgrids, res = res, load_params=load_params, params_file=params_file, nepochs = nepochs)
+    # train(cost_f, render, output_layer, nviews = nviews, nvoxgrids = nvoxgrids, res = res, load_params=load_params, params_file=params_file, nepochs = nepochs)
 
-if __name__ == "__main__":
-   main(sys.argv[1:])
+# if __name__ == "__main__":
+#    main(sys.argv[1:])
