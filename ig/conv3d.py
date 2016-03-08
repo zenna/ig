@@ -4,7 +4,7 @@ from lasagne import init
 from lasagne import nonlinearities
 
 class Conv2D3DLayer(BaseConvLayer):
-    def __init__(self, incoming, num_filters, filter_size,
+    def __init__(self, incoming, num_filters, filter_size, pad=0,
                  untie_biases=False, W=init.GlorotUniform(),
                  b=init.Constant(0.), nonlinearity=nonlinearities.rectify,
                  flip_filters=False, **kwargs):
