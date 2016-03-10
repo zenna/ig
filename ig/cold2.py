@@ -159,7 +159,7 @@ def var(v, nvoxgrids, res):
 def nparams(output_layer):
     return np.sum([q.flatten().shape[0] for q in lasagne.layers.get_all_param_values(output_layer)])
 
-def second_order(rotation_matrices, imagebatch, shape_params, width = 140, height = 140, nsteps = 100, res = 128, nvoxgrids = 4):
+def second_order(rotation_matrices, imagebatch, shape_params, width = 128, height = 128, nsteps = 100, res = 128, nvoxgrids = 4):
     """Creates a network which takes as input a image and returns a cost.
     Network extracts features of image to create shape params which are rendered.
     The similarity between the rendered image and the actual image is the cost
@@ -169,17 +169,21 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 140, heigh
 
     net = {}
     net['input'] = InputLayer((None, 1, width, height), input_var = first_img)
-    net['conv2d1'] = batch_norm(ConvLayer(net['input'], num_filters=32, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
-    net['conv2d2'] = batch_norm(ConvLayer(net['conv2d1'], num_filters=64, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
-    net['conv2d3'] = batch_norm(ConvLayer(net['conv2d2'], num_filters=132, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
-    net['conv2d4'] = batch_norm(ConvLayer(net['conv2d3'], num_filters=132, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
-    net['conv2d5'] = batch_norm(ConvLayer(net['conv2d4'], num_filters=132, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ))
+    net['conv2d1'] = batch_norm(ConvLayer(net['input'], num_filters=32, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
+    net['conv2d2'] = batch_norm(ConvLayer(net['conv2d1'], num_filters=64, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
+    net['conv2d3'] = batch_norm(ConvLayer(net['conv2d2'], num_filters=128, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
+    net['conv2d4'] = batch_norm(ConvLayer(net['conv2d3'], num_filters=128, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
+    net['conv2d5'] = batch_norm(ConvLayer(net['conv2d4'], num_filters=128, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same'))
     last_conv2d_layer = net['conv2d5']
-    net['reshape'] = lasagne.layers.ReshapeLayer(last_conv2d_layer, (nvoxgrids, 1, 132, 132, 132,))
-    net['conv3d1'] = batch_norm(Conv3DLayer(net['reshape'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ,flip_filters=False), pad='same')
-    net['conv3d2'] = batch_norm(Conv3DLayer(net['conv3d1'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ), pad='same')
-    net['conv3d3'] = batch_norm(Conv3DLayer(net['conv3d2'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu') ), pad='same')
-    last_conv3d_layer = net['conv3d3']
+    net['reshape'] = lasagne.layers.ReshapeLayer(last_conv2d_layer, (nvoxgrids, 1, 128, 128, 128))
+    net['conv3d1'] = batch_norm(Conv3DLayer(net['reshape'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same', flip_filters=False))
+    net['conv3d2'] = batch_norm(Conv3DLayer(net['conv3d1'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same'))
+    net['conv3d3'] = batch_norm(Conv3DLayer(net['conv3d2'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'),  pad='same'))
+    net['conv3d4'] = batch_norm(Conv3DLayer(net['conv3d3'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same', flip_filters=False))
+    net['conv3d5'] = batch_norm(Conv3DLayer(net['conv3d4'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same'))
+    net['conv3d6'] = batch_norm(Conv3DLayer(net['conv3d5'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'),  pad='same'))
+
+    last_conv3d_layer = net['conv3d6']
     net['pooled'] = lasagne.layers.FeaturePoolLayer(last_conv3d_layer,4, pool_function=T.mean)
     net['voxels'] = lasagne.layers.ReshapeLayer(net['pooled'], (nvoxgrids, res, res, res))
     output_layer = net['voxels']
@@ -250,7 +254,7 @@ def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, sav
         lasagne.layers.set_all_param_values(output_layer, param_values)
 
     for i in range(nepochs):
-        print "epoch: ", i
+        print "epoch: ", i, " of ", nepochs
         try:
             filenames = get_rnd_voxels(nvoxgrids)
             print filenames
@@ -280,13 +284,13 @@ def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, sav
                 print "continuing"
 
 def main(argv):
-    width = 140
-    height = 140
+    width = 128
+    height = 128
     res = 128
     nsteps = 100
     nvoxgrids = 8
     nviews = 1
-    nepochs = 100
+    nepochs = 10000
 
     ## Args
     args = handle_args(argv)
@@ -303,15 +307,15 @@ def main(argv):
 
     views = T.tensor4() # nbatches * width * height
     outputs, net, output_layer, updates = second_order(rotation_matrices, views, shape_params, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
-    selected_outputs = ['loss', 'loss1', 'loss2', 'voxels'] + net.keys()
+    selected_outputs = ['loss', 'loss1', 'loss2', 'voxels'] #+ net.keys()
     cost_f = build_conv_net(views, shape_params, outputs, selected_outputs, updates)
 
     to_print = ['loss', 'loss1', 'loss2']
-    to_save = ['loss', 'filenames', 'voxels']
+    to_save = ['loss', 'voxels']
     train(cost_f, render, output_layer, nviews = nviews, nvoxgrids = nvoxgrids, res = res,
           load_params=load_params, params_file=params_file, nepochs = nepochs,
           to_print = to_print, to_save = to_save, output_keys = selected_outputs)
 
-# if __name__ == "__main__":
-#    main(sys.argv[1:])
-#
+if __name__ == "__main__":
+   main(sys.argv[1:])
+

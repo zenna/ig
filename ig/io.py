@@ -1,5 +1,6 @@
 import numpy as np
 import sys, getopt
+import os
 
 def load_voxels_binary(fname, width, height, depth, max_value=255.0):
     data = np.fromfile(fname, dtype='uint8')
