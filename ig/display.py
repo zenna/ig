@@ -62,3 +62,9 @@ def histo(x):
     # the histogram of the data
     n, bins, patches = plt.hist(x.flatten(), 500,range=(0.0001,1), normed=1, facecolor='green', alpha=0.75)
     plt.show()
+
+def draw_conv_layers(data):
+    "Draw the convolutional layers::"
+    for i in range(data.shape[0]):
+        plt.figure()
+        plt.imshow(data[i], interpolation = 'nearest')
