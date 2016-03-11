@@ -6,7 +6,7 @@ import scipy.ndimage
 def load_voxels_binary(fname, width, height, depth, max_value=255.0, zoom = 1, order = 1):
     data = np.fromfile(fname, dtype='uint8')
     voxels = np.reshape(data, (width, height, depth))/float(max_value)
-    if zoom = 1:
+    if zoom == 1:
         return voxels
     else:
         return scipy.ndimage.zoom(voxels, zoom, order = order)
