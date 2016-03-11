@@ -1,14 +1,15 @@
-import pylab
-import matplotlib.pyplot as plt
-from PIL import Image
-import numpy as np
-import theano.printing
-
 try:
     from mayavi import mlab
 except:
     print "couldnt import"
 from mayavi import mlab
+
+
+import pylab
+import matplotlib.pyplot as plt
+from PIL import Image
+import numpy as np
+import theano.printing
 
 plt.ion()
 
@@ -68,3 +69,11 @@ def draw_conv_layers(data):
     for i in range(data.shape[0]):
         plt.figure()
         plt.imshow(data[i], interpolation = 'nearest')
+
+def both_voxels(data, n):
+    mlab.figure()
+    voxels = data['voxels'][n]
+    mlab.pipeline.volume(mlab.pipeline.scalar_field(voxels))
+    mlab.figure()
+    ground_truth = ig.io.load_voxels_binary(data['filenames'][n], 128,128,128)
+    mlab.pipeline.volume(mlab.pipeline.scalar_field(ground_truth))

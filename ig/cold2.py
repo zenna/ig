@@ -1,5 +1,5 @@
 # Build validation function
-# 
+#
 
 ## Volume Raycasting
 from theano import function, config, shared, printing
@@ -237,10 +237,20 @@ def load_parameters(output_layer, params_file):
 ## ========
 
 # def do_validation():
-    
+def iterate_minibatches(inputs, batchsize, shuffle=False):
+    if shuffle:
+        indices = np.arange(len(inputs))
+        np.random.shuffle(indices)
+    for start_idx in range(0, len(inputs) - batchsize + 1, batchsize):
+        if shuffle:
+            excerpt = indices[start_idx:start_idx + batchsize]
+        else:
+            excerpt = slice(start_idx, start_idx + batchsize)
+        yield inputs[excerpt]
 
 def train(cost_f, val_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, save_data = True,
           nepochs = 100, save_every = 10, load_params = True, params_file = None,
+          validate = False, validate_every = 20,
           fail_on_except = False, to_print = [], to_save = [], output_keys = []):
     """Learn Parameters for Neural Network"""
     print "Training"
@@ -254,6 +264,11 @@ def train(cost_f, val_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 1
         os.mkdir(full_dir_name)
     if load_params:
         load_parameters(output_layer, params_file)
+
+    # Validation
+    test_files = filter(lambda x:x.endswith(".raw") and "test" in x, get_filepaths(os.getenv('HOME') + '/data/ModelNet40'))
+    canonical_view = rand_rotation_matrices(1)
+    val_loss = 0
 
     for i in range(nepochs):
         print "epoch: ", i, " of ", nepochs
@@ -270,6 +285,19 @@ def train(cost_f, val_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 1
         outputs_dict = dict(zip(output_keys, outputs))
         for key in to_print:
             print "%s: " % key, outputs_dict[key]
+        # Validation
+        if validate and i % validate_every == 0:
+            print "Assessing Validation Error"
+            val_loss = 0
+            val_minibatch_size = nvoxgrids
+            for fnames in iterate_minibatches(filenames, val_minibatch_size):
+                voxel_data = [load_voxels_binary(v, 128, 128, 128, zoom = 0.5)*10.0 for v in filenames]
+                voxel_dataX = [np.array(v,dtype=config.floatX) for v in voxel_data]
+                imgdata = render(voxel_dataX, canonical_view)
+                loss, loss1, loss2 = val_f(imgdata[0], voxel_dataX) # hack
+                val_loss = val_loss + loss
+                print "Accumulative validation error: ", val_loss
+
         if save_data and i % save_every == 0:
             fname = "epoch%s" % (i)
             full_fname = os.path.join(full_dir_name, fname)
@@ -277,6 +305,7 @@ def train(cost_f, val_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 1
             to_save_dict = {key : outputs_dict[key] for key in to_save}
             to_save_dict['param_values'] = param_values
             to_save_dict['filenames'] = filenames
+            to_save_dict['val_loss'] = val_loss
             np.savez_compressed(full_fname, **to_save_dict)
         # except Exception as e:
         #     if fail_on_except:
@@ -336,6 +365,5 @@ def main(argv):
           load_params=load_params, params_file=params_file, nepochs = nepochs,
           to_print = to_print, to_save = to_save, output_keys = selected_outputs)
 
-if __name__ == "__main__":
-   main(sys.argv[1:])
-
+# if __name__ == "__main__":
+#    main(sys.argv[1:])
