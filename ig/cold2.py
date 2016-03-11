@@ -1,3 +1,6 @@
+# Build validation function
+# 
+
 ## Volume Raycasting
 from theano import function, config, shared, printing
 import numpy as np
@@ -169,13 +172,13 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 128, heigh
 
     net = {}
     net['input'] = InputLayer((None, 1, width, height), input_var = first_img)
-    net['conv2d1'] = batch_norm(ConvLayer(net['input'], num_filters=32, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
-    net['conv2d2'] = batch_norm(ConvLayer(net['conv2d1'], num_filters=64, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
-    net['conv2d3'] = batch_norm(ConvLayer(net['conv2d2'], num_filters=128, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
-    net['conv2d4'] = batch_norm(ConvLayer(net['conv2d3'], num_filters=128, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
-    net['conv2d5'] = batch_norm(ConvLayer(net['conv2d4'], num_filters=128, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same'))
+    net['conv2d1'] = batch_norm(ConvLayer(net['input'], num_filters=res/4, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
+    net['conv2d2'] = batch_norm(ConvLayer(net['conv2d1'], num_filters=res/2, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
+    net['conv2d3'] = batch_norm(ConvLayer(net['conv2d2'], num_filters=res, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
+    net['conv2d4'] = batch_norm(ConvLayer(net['conv2d3'], num_filters=res, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
+    net['conv2d5'] = batch_norm(ConvLayer(net['conv2d4'], num_filters=res, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same'))
     last_conv2d_layer = net['conv2d5']
-    net['reshape'] = lasagne.layers.ReshapeLayer(last_conv2d_layer, (nvoxgrids, 1, 128, 128, 128))
+    net['reshape'] = lasagne.layers.ReshapeLayer(last_conv2d_layer, (nvoxgrids, 1, res, res, res))
     net['conv3d1'] = batch_norm(Conv3DLayer(net['reshape'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same', flip_filters=False))
     net['conv3d2'] = batch_norm(Conv3DLayer(net['conv3d1'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same'))
     net['conv3d3'] = batch_norm(Conv3DLayer(net['conv3d2'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'),  pad='same'))
@@ -190,6 +193,11 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 128, heigh
     outputs = {}
     voxels = lasagne.layers.get_output(output_layer)
     intermediate_outputs = {key : lasagne.layers.get_output(net[key]) for key in net.keys()}
+    outputs.update(intermediate_outputs)
+    return net, output_layer, outputs
+
+def get_loss(net, shape_params, nvoxgrids, res, outputs, deterministic = False):
+    voxels = lasagne.layers.get_output(output_layer, deterministic = deterministic)
 
     # Voxel Variance loss
     loss1 = mse(voxels, shape_params)
@@ -197,37 +205,30 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 128, heigh
     data_variance = var(shape_params, nvoxgrids, res)
     loss2 = dist(proposal_variance, data_variance)
 
-    lambda1 = 1.
+    lambda1 = 1.0
     lambda2 = 2.0
     loss = lambda1 * loss1 + lambda2 * loss2
+    return loss, loss1, loss2
 
+def get_updates(loss, output_layer):
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
-    # grads = {key + '_grad' : T.grad(loss, params[0])}=
-    #  [i.shape for i in lasagne.layers.get_all_param_values(net['conv2d1')
-
-    # Training
-    # network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
-    # network_updates = lasagne.updates.adagrad(loss, params)
-    # network_updates = lasagne.updates.adamax(loss, params)
-    # network_updates = lasagne.updates.adam(loss, params, learning_rate=1e-4)
     lr = 0.1
     sh_lr = theano.shared(lasagne.utils.floatX(lr))
-    network_updates = lasagne.updates.momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
-    # network_updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
-    outputs.update(intermediate_outputs)
-    outputs.update({'loss1': loss1})
-    outputs.update({'loss2': loss2})
-    outputs.update({'loss': loss})
-    outputs.update({'voxels': voxels})
 
-    return outputs, net, output_layer, network_updates
+    # updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
+    # updates = lasagne.updates.adagrad(loss, params)
+    # updates = lasagne.updates.adamax(loss, params)
+    # updates = lasagne.updates.adam(loss, params, learning_rate=1e-4)
+    updates = lasagne.updates.momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
+    # updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
+    return updates
 
 def build_conv_net(views, shape_params, outputs, selected_outputs, updates, mode = curr_mode):
     print "Building ConvNet with outputs", selected_outputs
     outputs_list = [outputs[so] for so in selected_outputs]
     return function([views, shape_params], outputs_list, updates = updates, mode=mode)
 
-def load_params():
+def load_parameters(output_layer, params_file):
     print "Loading Params", params_file
     param_values = np.load(params_file)['param_values']
     lasagne.layers.set_all_param_values(output_layer, param_values)
@@ -235,7 +236,10 @@ def load_params():
 ## Training
 ## ========
 
-def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, save_data = True,
+def do_validation():
+    
+
+def train(cost_f, val_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, save_data = True,
           nepochs = 100, save_every = 10, load_params = True, params_file = None,
           fail_on_except = False, to_print = [], to_save = [], output_keys = []):
     """Learn Parameters for Neural Network"""
@@ -249,16 +253,14 @@ def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, sav
         print "Data will be saved to", full_dir_name
         os.mkdir(full_dir_name)
     if load_params:
-        print "Loading Params", params_file
-        param_values = np.load(params_file)['param_values']
-        lasagne.layers.set_all_param_values(output_layer, param_values)
+        load_parameters(output_layer, params_file)
 
     for i in range(nepochs):
         print "epoch: ", i, " of ", nepochs
         try:
             filenames = get_rnd_voxels(nvoxgrids)
             print filenames
-            voxel_data = [load_voxels_binary(v, res, res, res)*10.0 for v in filenames]
+            voxel_data = [load_voxels_binary(v, res, res, res, zoom = 0.5)*10.0 for v in filenames]
             voxel_dataX = [np.array(v,dtype=config.floatX) for v in voxel_data]
             r = rand_rotation_matrices(nviews)
             print "Rendering Training Data"
@@ -284,9 +286,9 @@ def train(cost_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, sav
                 print "continuing"
 
 def main(argv):
-    width = 128
-    height = 128
-    res = 128
+    width = 64
+    height = 64
+    res = 64
     nsteps = 100
     nvoxgrids = 8
     nviews = 1
@@ -305,17 +307,33 @@ def main(argv):
     print "Compiling Render Function"
     render = function([shape_params, rotation_matrices], out, mode=curr_mode)
 
+    ## Training Function
     views = T.tensor4() # nbatches * width * height
-    outputs, net, output_layer, updates = second_order(rotation_matrices, views, shape_params, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
+    net, output_layer, outputs = second_order(rotation_matrices, views, shape_params, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
+    loss, loss1, loss2 = get_loss(net, shape_params, nvoxgrids, res, outputs)
+    updates = get_updates(loss, output_layer)
+
+    outputs.update({'loss1': loss1})
+    outputs.update({'loss2': loss2})
+    outputs.update({'loss': loss})
+    outputs.update({'voxels': voxels})
+
     selected_outputs = ['loss', 'loss1', 'loss2', 'voxels'] #+ net.keys()
     cost_f = build_conv_net(views, shape_params, outputs, selected_outputs, updates)
 
+    ## Validation Function
+    val_loss, val_loss1, val_loss2 = get_loss(net, shape_params, nvoxgrids, res, outputs, deterministic = True)
+    outputs.update({'val_loss' : val_loss})
+    outputs.update({'val_loss1' : val_loss1})
+    outputs.update({'val_loss2' : val_loss2})
+    val_f = build_conv_net(views, shape_params, outputs, ['loss'], None)
+
     to_print = ['loss', 'loss1', 'loss2']
     to_save = ['loss', 'voxels']
-    train(cost_f, render, output_layer, nviews = nviews, nvoxgrids = nvoxgrids, res = res,
+    train(cost_f, val_f, render, output_layer, nviews = nviews, nvoxgrids = nvoxgrids, res = res,
           load_params=load_params, params_file=params_file, nepochs = nepochs,
           to_print = to_print, to_save = to_save, output_keys = selected_outputs)
 
-if __name__ == "__main__":
-   main(sys.argv[1:])
+# if __name__ == "__main__":
+#    main(sys.argv[1:])
 

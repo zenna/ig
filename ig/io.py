@@ -1,10 +1,15 @@
 import numpy as np
 import sys, getopt
 import os
+import scipy.ndimage
 
-def load_voxels_binary(fname, width, height, depth, max_value=255.0):
+def load_voxels_binary(fname, width, height, depth, max_value=255.0, zoom = 1, order = 1):
     data = np.fromfile(fname, dtype='uint8')
-    return np.reshape(data, (width, height, depth))/float(max_value)
+    voxels = np.reshape(data, (width, height, depth))/float(max_value)
+    if zoom = 1:
+        return voxels
+    else:
+        return scipy.ndimage.zoom(voxels, zoom, order = order)
 
 def get_filepaths(directory):
     """
