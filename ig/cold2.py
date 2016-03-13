@@ -1,4 +1,4 @@
-# Build validation function
+7# Build validation function
 #
 
 ## Volume Raycasting
@@ -201,25 +201,27 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 128, heigh
 def get_loss(net, voxels, shape_params, nvoxgrids, res, output_layer):
     # Voxel Variance loss
     loss1 = mse(voxels, shape_params)
-    proposal_variance = var(voxels, nvoxgrids, res)
-    data_variance = var(shape_params, nvoxgrids, res)
-    loss2 = dist(proposal_variance, data_variance)
+    return (loss1,)
+    # proposal_variance = var(voxels, nvoxgrids, res)
+    # data_variance = var(shape_params, nvoxgrids, res)
+    # loss2 = dist(proposal_variance, data_variance)
 
-    lambda1 = 1.0
-    lambda2 = 2.0
-    loss = lambda1 * loss1 + lambda2 * loss2
-    return loss, loss1, loss2
+    # lambda1 = 1.0
+    # lambda2 = 2.0
+    # loss = lambda1 * loss1 + lambda2 * loss2
+    # return loss, loss1, loss2
 
 def get_updates(loss, output_layer, lr = 0.1, momentum=0.9, is_lr_learned = True, is_momentum_learned = False):
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
     if is_lr_learned:
         lr = theano.shared(lasagne.utils.floatX(lr))
-
     if is_momentum_learned:
         momentum = theano.shared(lasagne.utils.floatX(momentum))
+
     updates = lasagne.updates.momentum(loss, params, learning_rate=lr, momentum=momentum)
     hyper_params = {'momentum' : momentum, lr : lr}
     return updates, hyper_params
+
 
 def build_conv_net(views, shape_params, outputs, selected_outputs, updates, mode = curr_mode):
     print "Building ConvNet with outputs", selected_outputs
@@ -341,24 +343,26 @@ def main(argv):
     views = T.tensor4() # nbatches * width * height
     net, output_layer, outputs = second_order(rotation_matrices, views, shape_params, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
     voxels = lasagne.layers.get_output(output_layer, deterministic = False)
-    loss, loss1, loss2 = get_loss(net, voxels, shape_params, nvoxgrids, res, output_layer)
-    updates, hyper_params = get_updates(loss, output_layer)
-    options.update('hyper_params')
 
-    outputs.update({'loss1': loss1})
-    outputs.update({'loss2': loss2})
+    losses = get_loss(net, voxels, shape_params, nvoxgrids, res, output_layer)
+    loss = losses[0]
+    updates, hyper_params  = get_updates(loss, output_layer)
+
+    # outputs.update({'loss1': loss1})
+    # outputs.update({'loss2': loss2})
     outputs.update({'loss': loss})
     outputs.update({'voxels': voxels})
 
-    selected_outputs = ['loss', 'loss1', 'loss2', 'voxels'] #+ net.keys()
+    selected_outputs = ['loss', 'voxels'] #+ net.keys()
     cost_f = build_conv_net(views, shape_params, outputs, selected_outputs, updates)
 
     ## Validation Function
     val_voxels = lasagne.layers.get_output(output_layer, deterministic = True)
-    val_loss, val_loss1, val_loss2 = get_loss(net, val_voxels, shape_params, nvoxgrids, res, output_layer)
+    val_losses = get_loss(net, val_voxels, shape_params, nvoxgrids, res, output_layer)
+    val_loss = val_losses[0]
     outputs.update({'val_loss' : val_loss})
-    outputs.update({'val_loss1' : val_loss1})
-    outputs.update({'val_loss2' : val_loss2})
+    # outputs.update({'val_loss1' : val_loss1})
+    # outputs.update({'val_loss2' : val_loss2})
     val_f = build_conv_net(views, shape_params, outputs, ['loss'], None)
 
     to_print = ['loss', 'loss1', 'loss2']
@@ -370,6 +374,5 @@ def main(argv):
           load_params=load_params, params_file=params_file, nepochs = nepochs,
           to_print = to_print, to_save = to_save, output_keys = selected_outputs,
           options = options)
-
-# if __name__ == "__main__":
-#    main(sys.argv[1:])
+if __name__ == "__main__":
+   main(sys.argv[1:])
