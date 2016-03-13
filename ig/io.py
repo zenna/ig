@@ -33,18 +33,22 @@ def get_rnd_voxels(n):
     return np.random.choice(files, n, replace=False)
 
 def handle_args(argv):
-    params_file = ''
-    outputfile = ''
+    options = {'params_file' : '', 'learning_rate' : 0.1, 'momentum' : 0.9}
     try:
-        opts, args = getopt.getopt(argv,"hp:",["params_file="])
+        opts, args = getopt.getopt(argv,"hp:l:",["params_file=, learning_rate="])
     except getopt.GetoptError:
-        print 'cold2.py -p <paramfile>'
+        print 'cold2.py -p <paramfile> -l <learning_rate> -m <momentum>'
         sys.exit(2)
     for opt, arg in opts:
-        if opt == '-h':
-            print 'cold2.py -p <paramfile>'
+        if opt in ("-h", "--help"):
+            print 'cold2.py -p <paramfile> -p'
             sys.exit()
         elif opt in ("-p", "--params_file"):
-            params_file = arg
-    print "Param File is: ", params_file
-    return {'params_file' : params_file}
+            options['params_file'] = arg
+        elif opt in ("-l", "--learning_rate"):
+            options['learning_rate'] = float(arg)
+        elif opt in ("-m", "--momentum"):
+            options['momentum'] = float(arg)
+
+    print options
+    return options
