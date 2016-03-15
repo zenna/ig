@@ -276,39 +276,44 @@ def train(cost_f, val_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 1
 
     if save_data:
         full_dir_name = mk_dir()
+        ig.io.save_dict_csv(os.path.join(full_dir_name, "options.csv"), options)
     if load_params:
         load_parameters(output_layer, params_file)
 
     # Validation
     test_files = filter(lambda x:x.endswith(".raw") and "test" in x, get_filepaths(os.getenv('HOME') + '/data/ModelNet40'))
     canonical_view = rand_rotation_matrices(1)
-    val_loss = options['val_loss'] = 0
+    val_loss = runtime_params['val_loss'] = 0
 
     for i in range(nepochs):
         print "epoch: ", i, " of ", nepochs
         # try:
-        filenames = options['filenames'] = get_rnd_voxels(nvoxgrids)
+        filenames = runtime_params['filenames'] = get_rnd_voxels(nvoxgrids)
         outputs = loss_data(filenames, nviews, cost_f)
         outputs_dict = dict(zip(output_keys, outputs))
-        options.update(outputs_dict)
+        runtime_params.update(outputs_dict)
         for key in to_print:
             print "%s: " % key, outputs_dict[key]
         # Validation
         if validate and i % validate_every == 0:
             print "Assessing Validation Error"
-            val_loss = 0
             val_minibatch_size = nvoxgrids
-            for fnames in iterate_minibatches(filenames, val_minibatch_size):
-                [loss] = loss_data(filenames, nviews, val_f)
-                val_loss = val_loss + loss
-                print "Accumulative validation error: ", val_loss
-            options['val_loss'] = val_loss
+            val_losses = []
+            for fnames in iterate_minibatches(test_files, val_minibatch_size):
+                [loss] = loss_data(test_files, nviews, val_f)
+                val_losses.append(loss)
+                print "validation loss: ", loss
+            runtime_params['val_loss'] = np.mean(val_losses)
+            print "test mean, median, variance loss:", runtime_params['val_loss'], np.median(val_losses), np.var(val_losses)
 
         if save_data and i % save_every == 0:
             fname = "epoch%s" % (i)
             full_fname = os.path.join(full_dir_name, fname)
-            param_values = options['param_values'] = lasagne.layers.get_all_param_values(output_layer)
-            to_save_dict = {key : options[key] for key in to_save}
+            param_values = runtime_params['param_values'] = lasagne.layers.get_all_param_values(output_layer)
+            all_to_save = {}
+            all_to_save.update(options)
+            all_to_save.update(runtime_params)
+            to_save_dict = {key : all_to_save[key] for key in to_save}
             np.savez_compressed(full_fname, **to_save_dict)
         # except Exception as e:
         #     if fail_on_except:
@@ -320,11 +325,6 @@ def train(cost_f, val_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 1
 def main(argv):
     ## Args
     options = handle_args(argv)
-    params_file = options['params_file']
-    load_params = True
-    if params_file == '':
-        load_params = False
-
     width = options[width] = 64
     height = options[height] = 64
     res = options[res] = 64
@@ -370,9 +370,8 @@ def main(argv):
                'width', 'height', 'res', 'nsteps', 'nvoxgrids', 'nviews',
                'nepochs', 'learning_rate', 'momentum']
     # Kinds of things I want to savea, (1) Output from function (2) Parameters (3) Constant values
-    train(cost_f, val_f, render, output_layer, nviews = nviews, nvoxgrids = nvoxgrids, res = res,
-          load_params=load_params, params_file=params_file, nepochs = nepochs,
-          to_print = to_print, to_save = to_save, output_keys = selected_outputs,
-          options = options)
+    train(cost_f, val_f, render, output_layer, to_print = to_print,
+          to_save = to_save, output_keys = selected_outputs, options = options)
+
 if __name__ == "__main__":
    main(sys.argv[1:])

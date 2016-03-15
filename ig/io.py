@@ -2,6 +2,7 @@ import numpy as np
 import sys, getopt
 import os
 import scipy.ndimage
+import csv
 
 def load_voxels_binary(fname, width, height, depth, max_value=255.0, zoom = 1, order = 1):
     data = np.fromfile(fname, dtype='uint8')
@@ -10,6 +11,13 @@ def load_voxels_binary(fname, width, height, depth, max_value=255.0, zoom = 1, o
         return voxels
     else:
         return scipy.ndimage.zoom(voxels, zoom, order = order)
+
+def save_params(fname, params):
+    f = open(fname, 'wb')
+    writer = csv.writer(f)
+    for key, value in params.items():
+        writer.writerow([key, value])
+    f.close()
 
 def get_filepaths(directory):
     """
@@ -33,7 +41,8 @@ def get_rnd_voxels(n):
     return np.random.choice(files, n, replace=False)
 
 def handle_args(argv):
-    options = {'params_file' : '', 'learning_rate' : 0.1, 'momentum' : 0.9}
+    options = {'params_file' : '', 'learning_rate' : 0.1, 'momentum' : 0.9, 'load_params' : False}
+
     try:
         opts, args = getopt.getopt(argv,"hp:l:",["params_file=, learning_rate="])
     except getopt.GetoptError:
@@ -45,6 +54,7 @@ def handle_args(argv):
             sys.exit()
         elif opt in ("-p", "--params_file"):
             options['params_file'] = arg
+            options['load_params'] = True
         elif opt in ("-l", "--learning_rate"):
             options['learning_rate'] = float(arg)
         elif opt in ("-m", "--momentum"):
