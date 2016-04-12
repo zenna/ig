@@ -12,7 +12,7 @@ def load_voxels_binary(fname, width, height, depth, max_value=255.0, zoom = 1, o
     else:
         return scipy.ndimage.zoom(voxels, zoom, order = order)
 
-def save_params(fname, params):
+def save_dict_csv(fname, params):
     f = open(fname, 'wb')
     writer = csv.writer(f)
     for key, value in params.items():
