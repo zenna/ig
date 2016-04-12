@@ -19,6 +19,14 @@ def save_dict_csv(fname, params):
         writer.writerow([key, value])
     f.close()
 
+
+def save_dict_csv(fname, params):
+    f = open(fname, 'wb')
+    writer = csv.writer(f)
+    for key, value in params.items():
+        writer.writerow([key, value])
+    f.close()
+
 def get_filepaths(directory):
     """
     This function will generate the file names in a directory
@@ -41,16 +49,18 @@ def get_rnd_voxels(n):
     return np.random.choice(files, n, replace=False)
 
 def handle_args(argv):
-    options = {'params_file' : '', 'learning_rate' : 0.1, 'momentum' : 0.9, 'load_params' : False}
-
+    options = {'params_file' : '', 'learning_rate' : 0.1, 'momentum' : 0.9, 'load_params' : False, 'update' : 'momentum',
+               'description' : ''}
+    help_msg = "cold2.py -p <paramfile> -l <learning_rate> -m <momentum> -u <update algorithm> -d <job description>"
     try:
-        opts, args = getopt.getopt(argv,"hp:l:",["params_file=, learning_rate="])
+        opts, args = getopt.getopt(argv,"hp:l:m:u:d:",["params_file=, learning_rate=, momentum=, update=, description="])
     except getopt.GetoptError:
-        print 'cold2.py -p <paramfile> -l <learning_rate> -m <momentum>'
+        print "invalid options"
+        print help_msg
         sys.exit(2)
     for opt, arg in opts:
         if opt in ("-h", "--help"):
-            print 'cold2.py -p <paramfile> -p'
+            print help_msg
             sys.exit()
         elif opt in ("-p", "--params_file"):
             options['params_file'] = arg
@@ -59,6 +69,15 @@ def handle_args(argv):
             options['learning_rate'] = float(arg)
         elif opt in ("-m", "--momentum"):
             options['momentum'] = float(arg)
+        elif opt in ("-u", "--update"):
+            if arg in ['momentum', 'adam', 'rmsprop']:
+                options['update'] = arg
+            else:
+                print "update must be in ", ['momentum', 'adam', 'rmsprop'] 
+                print help_msg
+                sys.exit()
+        elif opt in ("-d", "--description"):
+            options['description'] = arg
 
     print options
     return options

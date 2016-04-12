@@ -45,3 +45,10 @@ def rand_rotation_matrix(deflection=1.0, randnums=None, floatX = 'float32'):
 # n random matrices
 def rand_rotation_matrices(n, floatX = 'float32'):
     return np.stack([rand_rotation_matrix(floatX = floatX) for i in range(n)])
+
+
+def named_outputs(func, names):
+    def dict_func(*args):
+        return dict(zip(names, func(*args)))
+
+    return dict_func
