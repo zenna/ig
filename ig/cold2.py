@@ -218,9 +218,9 @@ def get_updates(loss, output_layer):
 
     # updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
     # updates = lasagne.updates.adagrad(loss, params)
-    # updates = lasagne.updates.adamax(loss, params)
+    updates = lasagne.updates.adamax(loss, params, learning_rate = lr)
     # updates = lasagne.updates.adam(loss, params, learning_rate=1e-4)
-    updates = lasagne.updates.momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
+    # updates = lasagne.updates.momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
     # updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
     return updates, sh_lr
 
