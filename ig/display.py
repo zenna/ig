@@ -4,12 +4,13 @@ except:
     print "couldnt import"
 from mayavi import mlab
 
-
 import pylab
 import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
 import theano.printing
+import ig
+import ig.io
 
 plt.ion()
 

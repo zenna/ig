@@ -1,4 +1,4 @@
-# Build validation function
+7# Build validation function
 #
 
 ## Volume Raycasting
@@ -34,7 +34,6 @@ from theano.compile.nanguardmode import NanGuardMode
 curr_mode = None
 # curr_mode = NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
 # config.optimizer='fast_compile'
-
 
 # Genereate values in raster space, x[i,j] = [i,j]
 def gen_fragcoords(width, height):
@@ -211,8 +210,9 @@ def get_loss(net, voxels, shape_params, nvoxgrids, res, output_layer):
     # loss = lambda1 * loss1 + lambda2 * loss2
     # return loss, loss1, loss2
 
-def get_updates(loss, output_layer):
+def get_updates(loss, output_layer, options):
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
+<<<<<<< HEAD
     lr = 0.1
     sh_lr = theano.shared(lasagne.utils.floatX(lr))
 
@@ -223,6 +223,16 @@ def get_updates(loss, output_layer):
     # updates = lasagne.updates.momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
     # updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
     return updates, sh_lr
+=======
+    updates = {}
+    if options['update'] == 'momentum':
+        updates = lasagne.updates.momentum(loss, params, learning_rate=options['learning_rate'], momentum=options['momentum'])
+    elif options['update'] == 'adam':
+        updates = lasagne.updates.adam(loss, params, learning_rate=options['learning_rate'])
+    elif options['update'] == 'rmsprop':
+        updates = lasagne.updates.rmsprop(loss, params, learning_rate=options['learning_rate'])
+    return updates
+>>>>>>> 87dbdf898304464449188d9c10e50c0612f7d9ee
 
 def build_conv_net(views, shape_params, outputs, selected_outputs, updates, mode = curr_mode):
     print "Building ConvNet with outputs", selected_outputs
@@ -239,6 +249,7 @@ def load_parameters(output_layer, params_file):
 
 # def do_validation():
 def iterate_minibatches(inputs, batchsize, shuffle=False):
+    inputs = np.array(inputs)
     if shuffle:
         indices = np.arange(len(inputs))
         np.random.shuffle(indices)
@@ -249,92 +260,103 @@ def iterate_minibatches(inputs, batchsize, shuffle=False):
             excerpt = slice(start_idx, start_idx + batchsize)
         yield inputs[excerpt]
 
-def train(cost_f, val_f, render,  output_layer, nviews = 3, nvoxgrids=4, res = 128, save_data = True,
-          nepochs = 100, save_every = 10, load_params = True, params_file = None,
-          validate = True, validate_every = 50,
-          fail_on_except = False, to_print = [], to_save = [], output_keys = [], lr = 0.1):
+# Create directory with timestamp
+def mk_dir():
+    datadir = os.environ['DATADIR']
+    newdirname = str(time.time())
+    full_dir_name = os.path.join(datadir, newdirname)
+    print "Data will be saved to", full_dir_name
+    os.mkdir(full_dir_name)
+    return full_dir_name
+
+def loss_data(filenames, nviews, render, f):
+    voxel_data = [load_voxels_binary(v, 128, 128, 128, zoom = 0.5)*10.0 for v in filenames]
+    voxel_dataX = [np.array(v,dtype=config.floatX) for v in voxel_data]
+    r = rand_rotation_matrices(nviews)
+    print "Rendering Training Data"
+    imgdata = render(voxel_dataX, r)
+    print "Computing Net"
+    return f(imgdata[0], voxel_dataX)
+
+def train(cost_f, val_f, render,  output_layer, options, test_files = [], train_files = [], save_data = True, save_every = 10,
+          validate = False, validate_every = 50, fail_on_except = False, to_print = [],
+          to_save = [], output_keys = []):
     """Learn Parameters for Neural Network"""
     print "Training"
+    width = options['width']
+    height = options['height']
+    res = options['res']
+    nsteps = options['nsteps']
+    nvoxgrids = options['nvoxgrids']
+    nviews = options['nviews']
+    nepochs = options['nepochs']
+    load_params = options['load_params']
+    params_file = options['params_file']
 
-    # Create directory with timestamp
     if save_data:
-        datadir = os.environ['DATADIR']
-        newdirname = str(time.time())
-        full_dir_name = os.path.join(datadir, newdirname)
-        print "Data will be saved to", full_dir_name
-        os.mkdir(full_dir_name)
+        full_dir_name = mk_dir()
+        save_dict_csv(os.path.join(full_dir_name, "options.csv"), options)
     if load_params:
         load_parameters(output_layer, params_file)
 
     # Validation
-    test_files = filter(lambda x:x.endswith(".raw") and "test" in x, get_filepaths(os.getenv('HOME') + '/data/ModelNet40'))
+    runtime_params = {}
     canonical_view = rand_rotation_matrices(1)
-    val_loss = 0
+    val_loss = runtime_params['val_loss'] = 0
+    nminibatches = len(train_files) / nvoxgrids
 
     for i in range(nepochs):
         print "epoch: ", i, " of ", nepochs
-        try:
-            filenames = get_rnd_voxels(nvoxgrids)
-            # print filenames
-            voxel_data = [load_voxels_binary(v, 128, 128, 128, zoom = 0.5)*10.0 for v in filenames]
-            voxel_dataX = [np.array(v,dtype=config.floatX) for v in voxel_data]
-            r = rand_rotation_matrices(nviews)
-            print "Rendering Training Data"
-            imgdata = render(voxel_dataX, r)
-            print "Computing Net"
-            outputs = cost_f(imgdata[0], voxel_dataX)
-            outputs_dict = dict(zip(output_keys, outputs))
-            for key in to_print:
-                print "%s: " % key, outputs_dict[key]
-            print "learning_rate", lr.get_value()
-            # Validation
-            if validate and i % validate_every == 0:
-                print "Assessing Validation Error"
-                val_loss = 0
-                val_minibatch_size = nvoxgrids
-                j = 0
-                for fnames in iterate_minibatches(test_files, val_minibatch_size):
-                    voxel_data = [load_voxels_binary(v, 128, 128, 128, zoom = 0.5)*10.0 for v in fnames]
-                    voxel_dataX = [np.array(v,dtype=config.floatX) for v in voxel_data]
-                    imgdata = render(voxel_dataX, canonical_view)
-                    [loss] = val_f(imgdata[0], voxel_dataX) # hack
-                    val_loss = val_loss + loss
-                    j = j + 1
-                    print "validation error: ", loss
-                val_loss = val_loss / j
-                print val_loss
+        j = 0
+        for fnames in iterate_minibatches(train_files, nvoxgrids, shuffle=True):
+            runtime_params['filenames'] = fnames
+            print "epoch: ", i, " of ", nepochs, " - minibatch ", j, " of ", nminibatches
+            try:
+                outputs_dict = loss_data(fnames, nviews, render, cost_f)
+                runtime_params.update(outputs_dict)
+                for key in to_print:
+                    print "%s: " % key, outputs_dict[key]
+                # Validation
+                if validate and j % validate_every == 0:
+                    print "Assessing Validation Error"
+                    val_minibatch_size = nvoxgrids
+                    val_losses = []
+                    for fnames in iterate_minibatches(test_files, val_minibatch_size):
+                        loss = loss_data(fnames, nviews, render, val_f)['loss']
+                        val_losses.append(loss)
+                        print "validation loss: ", loss
+                    runtime_params['val_loss'] = np.mean(val_losses)
+                    print "test mean, median, variance loss:", runtime_params['val_loss'], np.median(val_losses), np.var(val_losses)
 
-            if save_data and i % save_every == 0:
-                fname = "epoch%s" % (i)
-                full_fname = os.path.join(full_dir_name, fname)
-                param_values = lasagne.layers.get_all_param_values(output_layer)
-                to_save_dict = {key : outputs_dict[key] for key in to_save}
-                to_save_dict['param_values'] = param_values
-                to_save_dict['filenames'] = filenames
-                to_save_dict['val_loss'] = val_loss
-                np.savez_compressed(full_fname, **to_save_dict)
-        except Exception as e:
-            if fail_on_except:
-                raise e
-            else:
-                print "Got error: ", e
-                print "continuing"
+                if save_data and j % save_every == 0:
+                    fname = "epoch%sbatch%s" % (i, j)
+                    full_fname = os.path.join(full_dir_name, fname)
+                    param_values = runtime_params['param_values'] = lasagne.layers.get_all_param_values(output_layer)
+                    all_to_save = {}
+                    all_to_save.update(options)
+                    all_to_save.update(runtime_params)
+                    to_save_dict = {key : all_to_save[key] for key in to_save}
+                    np.savez_compressed(full_fname, **to_save_dict)
+                j = j + 1
+            except Exception as e:
+                if fail_on_except:
+                    raise e
+                else:
+                    print "Got error: ", e
+                    print "continuing"
 
 def main(argv):
-    width = 64
-    height = 64
-    res = 64
-    nsteps = 100
-    nvoxgrids = 8*8
-    nviews = 1
-    nepochs = 100000
-
     ## Args
-    args = handle_args(argv)
-    params_file = args['params_file']
-    load_params = True
-    if params_file == '':
-        load_params = False
+    options = handle_args(argv)
+    width = options['width'] = 64
+    height = options['height'] = 64
+    res = options['res'] = 64
+    nsteps = options['nsteps'] = 100
+    nvoxgrids = options['nvoxgrids'] = 8*8
+    nviews = options['nviews'] = 1
+    nepochs = options['nepochs'] = 10000
+
+    print options
 
     rotation_matrices = T.tensor3()
     shape_params = T.tensor4()
@@ -346,9 +368,10 @@ def main(argv):
     views = T.tensor4() # nbatches * width * height
     net, output_layer, outputs = second_order(rotation_matrices, views, shape_params, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
     voxels = lasagne.layers.get_output(output_layer, deterministic = False)
+
     losses = get_loss(net, voxels, shape_params, nvoxgrids, res, output_layer)
     loss = losses[0]
-    updates, lr = get_updates(loss, output_layer)
+    updates = get_updates(loss, output_layer, options)
 
     # outputs.update({'loss1': loss1})
     # outputs.update({'loss2': loss2})
@@ -357,6 +380,7 @@ def main(argv):
 
     selected_outputs = ['loss', 'voxels'] #+ net.keys()
     cost_f = build_conv_net(views, shape_params, outputs, selected_outputs, updates)
+    cost_f_dict = named_outputs(cost_f, ['loss', 'voxels'])
 
     ## Validation Function
     val_voxels = lasagne.layers.get_output(output_layer, deterministic = True)
@@ -366,12 +390,19 @@ def main(argv):
     # outputs.update({'val_loss1' : val_loss1})
     # outputs.update({'val_loss2' : val_loss2})
     val_f = build_conv_net(views, shape_params, outputs, ['loss'], None)
+    val_f_dict = named_outputs(cost_f, ['loss', 'voxels'])
 
     to_print = ['loss']
-    to_save = ['loss', 'voxels']
-    train(cost_f, val_f, render, output_layer, nviews = nviews, nvoxgrids = nvoxgrids, res = res,
-          load_params=load_params, params_file=params_file, nepochs = nepochs,
-          to_print = to_print, to_save = to_save, output_keys = selected_outputs, lr = lr)
+    to_save = ['loss', 'voxels', 'val_loss', 'filenames', 'param_values',
+               'width', 'height', 'res', 'nsteps', 'nvoxgrids', 'nviews',
+               'nepochs', 'learning_rate', 'momentum']
+    
+    # Kinds of things I want to savea, (1) Output from function (2) Parameters (3) Constant values
+    test_files = filter(lambda x:x.endswith(".raw") and "test" in x, get_filepaths(os.getenv('HOME') + '/data/ModelNet40'))
+    train_files = filter(lambda x:x.endswith(".raw") and "train" in x, get_filepaths(os.getenv('HOME') + '/data/ModelNet40'))
+
+    train(cost_f_dict, val_f_dict, render, output_layer, options, test_files = test_files, train_files = train_files,
+          to_print = to_print, to_save = to_save, validate = True)
 
 if __name__ == "__main__":
    main(sys.argv[1:])

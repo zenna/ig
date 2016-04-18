@@ -2,6 +2,7 @@ import numpy as np
 import sys, getopt
 import os
 import scipy.ndimage
+import csv
 
 def load_voxels_binary(fname, width, height, depth, max_value=255.0, zoom = 1, order = 1):
     data = np.fromfile(fname, dtype='uint8')
@@ -10,6 +11,21 @@ def load_voxels_binary(fname, width, height, depth, max_value=255.0, zoom = 1, o
         return voxels
     else:
         return scipy.ndimage.zoom(voxels, zoom, order = order)
+
+def save_dict_csv(fname, params):
+    f = open(fname, 'wb')
+    writer = csv.writer(f)
+    for key, value in params.items():
+        writer.writerow([key, value])
+    f.close()
+
+
+def save_dict_csv(fname, params):
+    f = open(fname, 'wb')
+    writer = csv.writer(f)
+    for key, value in params.items():
+        writer.writerow([key, value])
+    f.close()
 
 def get_filepaths(directory):
     """
@@ -33,18 +49,35 @@ def get_rnd_voxels(n):
     return np.random.choice(files, n, replace=False)
 
 def handle_args(argv):
-    params_file = ''
-    outputfile = ''
+    options = {'params_file' : '', 'learning_rate' : 0.1, 'momentum' : 0.9, 'load_params' : False, 'update' : 'momentum',
+               'description' : ''}
+    help_msg = "cold2.py -p <paramfile> -l <learning_rate> -m <momentum> -u <update algorithm> -d <job description>"
     try:
-        opts, args = getopt.getopt(argv,"hp:",["params_file="])
+        opts, args = getopt.getopt(argv,"hp:l:m:u:d:",["params_file=, learning_rate=, momentum=, update=, description="])
     except getopt.GetoptError:
-        print 'cold2.py -p <paramfile>'
+        print "invalid options"
+        print help_msg
         sys.exit(2)
     for opt, arg in opts:
-        if opt == '-h':
-            print 'cold2.py -p <paramfile>'
+        if opt in ("-h", "--help"):
+            print help_msg
             sys.exit()
         elif opt in ("-p", "--params_file"):
-            params_file = arg
-    print "Param File is: ", params_file
-    return {'params_file' : params_file}
+            options['params_file'] = arg
+            options['load_params'] = True
+        elif opt in ("-l", "--learning_rate"):
+            options['learning_rate'] = float(arg)
+        elif opt in ("-m", "--momentum"):
+            options['momentum'] = float(arg)
+        elif opt in ("-u", "--update"):
+            if arg in ['momentum', 'adam', 'rmsprop']:
+                options['update'] = arg
+            else:
+                print "update must be in ", ['momentum', 'adam', 'rmsprop'] 
+                print help_msg
+                sys.exit()
+        elif opt in ("-d", "--description"):
+            options['description'] = arg
+
+    print options
+    return options
