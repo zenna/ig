@@ -131,6 +131,8 @@ def build_mlp(input_var=None):
     # the output layer to give access to a network in Lasagne:
     return l_out
 
+def s_rectify(y):
+  return T.minimum(T.maximum(0, x),1)
 
 def build_mlp2(input_var=None):
     network_layers = []
@@ -150,7 +152,7 @@ def build_mlp2(input_var=None):
             # initializing weights with Glorot's scheme (which is the default anyway):
             network = lasagne.layers.DenseLayer(
                     network, num_units=28*28,
-                    nonlinearity=lasagne.nonlinearities.rectify,
+                    nonlinearity=s_rectify,
                     W=lasagne.init.GlorotUniform())
             network_layers.append(network)
             network = lasagne.layers.DropoutLayer(network, p=0.5)
@@ -162,6 +164,9 @@ def build_mlp2(input_var=None):
     # 50% dropout again:
     network = lasagne.layers.DropoutLayer(network, p=0.5)
     network_layers.append(network)
+
+    # network = lasagne.layers.SliceLayer(network, [:,0:10])
+    # network_layers.append(network)
 
     # Finally, we'll add the fully-connected output layer, of 10 softmax units:
     network = lasagne.layers.DenseLayer(
@@ -451,10 +456,14 @@ def main(model='mlp', num_epochs=500):
         train_err = 0
         train_batches = 0
         start_time = time.time()
+        j = 0
         for batch in iterate_minibatches(X_train, y_train, 500, shuffle=True):
             inputs, targets = batch
             train_err += train_fn(inputs, targets)
             train_batches += 1
+            if j == 0:
+                print("maxmin", np.max(inputs), np.min(inputs))
+            j = j + 1
 
         # And a full pass over the validation data:
         val_err = 0
