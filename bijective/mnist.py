@@ -131,6 +131,50 @@ def build_mlp(input_var=None):
     # the output layer to give access to a network in Lasagne:
     return l_out
 
+def s_rectify(y):
+  return T.minimum(T.maximum(0, x),1)
+
+def build_mlp2(input_var=None):
+    network_layers = []
+    network = lasagne.layers.InputLayer(shape=(None, 1, 28, 28),
+                                     input_var=input_var)
+    network_layers.append(network)
+    network = lasagne.layers.DropoutLayer(network, p=0.2)
+    network_layers.append(network)
+
+    x = lasagne.layers.ReshapeLayer(network, ([0],-1))
+    nblocks = 5
+    ninblock = 2
+    print("Nblocks, ninblock layers:", nblocks, ninblock)
+    for j in range(nblocks):
+        for i in range(ninblock):
+            # Add a fully-connected layer of 800 units, using the linear rectifier, and
+            # initializing weights with Glorot's scheme (which is the default anyway):
+            network = lasagne.layers.DenseLayer(
+                    network, num_units=28*28,
+                    nonlinearity=s_rectify,
+                    W=lasagne.init.GlorotUniform())
+            network_layers.append(network)
+            network = lasagne.layers.DropoutLayer(network, p=0.5)
+            network_layers.append(network)
+        network = lasagne.layers.ElemwiseSumLayer([network, x])
+        network_layers.append(network)
+        x = network
+
+    # 50% dropout again:
+    network = lasagne.layers.DropoutLayer(network, p=0.5)
+    network_layers.append(network)
+
+    # network = lasagne.layers.SliceLayer(network, [:,0:10])
+    # network_layers.append(network)
+
+    # Finally, we'll add the fully-connected output layer, of 10 softmax units:
+    network = lasagne.layers.DenseLayer(
+            network, num_units=10,
+            nonlinearity=lasagne.nonlinearities.softmax)
+    network_layers.append(network)
+    return network
+
 
 def build_custom_mlp(input_var=None, depth=2, width=800, drop_input=.2,
                      drop_hidden=.5):
@@ -365,6 +409,9 @@ def main(model='mlp', num_epochs=500):
     elif model == 'pcnn2':
         print("Building pcnn2")
         network = build_pcnn2(input_var)
+    elif model == 'mlp2':
+        print("Building mlp2")
+        network = build_mlp2(input_var)
     else:
         print("Unrecognized model type %r." % model)
         return
@@ -409,10 +456,14 @@ def main(model='mlp', num_epochs=500):
         train_err = 0
         train_batches = 0
         start_time = time.time()
+        j = 0
         for batch in iterate_minibatches(X_train, y_train, 500, shuffle=True):
             inputs, targets = batch
             train_err += train_fn(inputs, targets)
             train_batches += 1
+            if j == 0:
+                print("maxmin", np.max(inputs), np.min(inputs))
+            j = j + 1
 
         # And a full pass over the validation data:
         val_err = 0
