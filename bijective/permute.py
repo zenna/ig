@@ -12,6 +12,19 @@ __all__ = [
     "PermuteLayer",
 ] 
 
+class Eye(Initializer):
+    """Initialize weights with constant value.
+
+    Parameters
+    ----------
+     val : float
+        Constant value for weights.
+    """
+    def __init__(self, val=0.0):
+        self.val = val
+
+    def sample(self, shape):
+        return floatX(np.eye(*shape))
 
 class UniformLen(Initializer):
     """Sample initial weights from the uniform distribution.
