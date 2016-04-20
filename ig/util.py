@@ -49,10 +49,6 @@ def rand_rotation_matrices(n, floatX = 'float32'):
 
 def named_outputs(func, names):
     def dict_func(*args):
-<<<<<<< HEAD
-        return dict(zip(func(*args), names))
-=======
         return dict(zip(names, func(*args)))
->>>>>>> 87dbdf898304464449188d9c10e50c0612f7d9ee
 
     return dict_func

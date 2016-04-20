@@ -212,18 +212,6 @@ def get_loss(net, voxels, shape_params, nvoxgrids, res, output_layer):
 
 def get_updates(loss, output_layer, options):
     params = lasagne.layers.get_all_params(output_layer, trainable=True)
-<<<<<<< HEAD
-    lr = 0.1
-    sh_lr = theano.shared(lasagne.utils.floatX(lr))
-
-    # updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
-    # updates = lasagne.updates.adagrad(loss, params)
-    updates = lasagne.updates.adamax(loss, params, learning_rate = lr)
-    # updates = lasagne.updates.adam(loss, params, learning_rate=1e-4)
-    # updates = lasagne.updates.momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
-    # updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=sh_lr, momentum=0.9)
-    return updates, sh_lr
-=======
     updates = {}
     if options['update'] == 'momentum':
         updates = lasagne.updates.momentum(loss, params, learning_rate=options['learning_rate'], momentum=options['momentum'])
@@ -232,7 +220,6 @@ def get_updates(loss, output_layer, options):
     elif options['update'] == 'rmsprop':
         updates = lasagne.updates.rmsprop(loss, params, learning_rate=options['learning_rate'])
     return updates
->>>>>>> 87dbdf898304464449188d9c10e50c0612f7d9ee
 
 def build_conv_net(views, shape_params, outputs, selected_outputs, updates, mode = curr_mode):
     print "Building ConvNet with outputs", selected_outputs
