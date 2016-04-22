@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import numpy as np
 import sys, getopt
 import os
@@ -13,7 +15,7 @@ def load_voxels_binary(fname, width, height, depth, max_value=255.0, zoom = 1, o
         return scipy.ndimage.zoom(voxels, zoom, order = order)
 
 def save_params(fname, params):
-    f = open(fname, 'wb')
+    f = open(fname, 'w')
     writer = csv.writer(f)
     for key, value in params.items():
         writer.writerow([key, value])
@@ -21,7 +23,7 @@ def save_params(fname, params):
 
 
 def save_dict_csv(fname, params):
-    f = open(fname, 'wb')
+    f = open(fname, 'w')
     writer = csv.writer(f)
     for key, value in params.items():
         writer.writerow([key, value])
@@ -55,12 +57,12 @@ def handle_args(argv):
     try:
         opts, args = getopt.getopt(argv,"hp:l:m:u:d:",["params_file=, learning_rate=, momentum=, update=, description="])
     except getopt.GetoptError:
-        print "invalid options"
-        print help_msg
+        print("invalid options")
+        print(help_msg)
         sys.exit(2)
     for opt, arg in opts:
         if opt in ("-h", "--help"):
-            print help_msg
+            print(help_msg)
             sys.exit()
         elif opt in ("-p", "--params_file"):
             options['params_file'] = arg
@@ -73,11 +75,11 @@ def handle_args(argv):
             if arg in ['momentum', 'adam', 'rmsprop']:
                 options['update'] = arg
             else:
-                print "update must be in ", ['momentum', 'adam', 'rmsprop'] 
-                print help_msg
+                print("update must be in ", ['momentum', 'adam', 'rmsprop'])
+                print(help_msg)
                 sys.exit()
         elif opt in ("-d", "--description"):
             options['description'] = arg
 
-    print options
+    print(options)
     return options

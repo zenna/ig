@@ -71,11 +71,11 @@ def invert_weight_matrix(w):
     # layer_weight = w[-(i+1)]
     if i%2 == 1:
       layer_weight = w[-(i+1)]
-      print "inv val", -(i+1+1), "of length", len(w)
+      print("inv val", -(i+1+1), "of length", len(w))
       invw.append(inv(layer_weight))
     else:
       layer_weight = w[-(i+1)]
-      print "bias inv val", -(i+1-1), "of length", len(w)
+      print("bias inv val", -(i+1-1), "of length", len(w))
       invw.append(-layer_weight)
 
   return invw
@@ -86,11 +86,11 @@ def invert_weight_matrix_symb(w):
     # layer_weight = w[-(i+1)]
     if i%2 == 1:
       layer_weight = w[-(i+1)]
-      print "inv val", -(i+1+1), "of length", len(w)
+      print("inv val", -(i+1+1), "of length", len(w))
       invw.append(matrix_inverse(layer_weight))
     else:
       layer_weight = w[-(i+1)]
-      print "bias inv val", -(i+1-1), "of length", len(w)
+      print("bias inv val", -(i+1-1), "of length", len(w))
       invw.append(-layer_weight)
 
   return invw

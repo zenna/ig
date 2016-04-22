@@ -1,8 +1,9 @@
-7# Build validation function
+# Build validation function
 #
+from __future__ import print_function
 
 ## Volume Raycasting
-from theano import function, config, shared, printing
+from theano import function, config, shared
 import numpy as np
 import time
 import os
@@ -22,7 +23,6 @@ else:
     from lasagne.layers import Conv2DLayer as ConvLayer
     from conv3d import Conv2D3DLayer as Conv3DLayer
 
-from lasagne.layers import batch_norm
 from lasagne.layers import MaxPool2DLayer as PoolLayer
 from lasagne.layers import LocalResponseNormalization2DLayer as NormLayer
 from lasagne.utils import floatX
@@ -30,10 +30,14 @@ from theano import tensor as T
 from theano import function, config, shared
 import pickle
 
+# from lasagne.layers import batch_norm
+def batch_norm(x): return x
+
 from theano.compile.nanguardmode import NanGuardMode
 curr_mode = None
 # curr_mode = NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
 # config.optimizer='fast_compile'
+# config.optimizer='None'
 
 # Genereate values in raster space, x[i,j] = [i,j]
 def gen_fragcoords(width, height):
@@ -172,24 +176,41 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 128, heigh
     first_img = T.reshape(first_img, (nvoxgrids,1,width,height))
 
     net = {}
-    net['input'] = InputLayer((None, 1, width, height), input_var = first_img)
-    net['conv2d1'] = batch_norm(ConvLayer(net['input'], num_filters=res/4, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
-    net['conv2d2'] = batch_norm(ConvLayer(net['conv2d1'], num_filters=res/2, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
-    net['conv2d3'] = batch_norm(ConvLayer(net['conv2d2'], num_filters=res, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
-    net['conv2d4'] = batch_norm(ConvLayer(net['conv2d3'], num_filters=res, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
-    net['conv2d5'] = batch_norm(ConvLayer(net['conv2d4'], num_filters=res, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same'))
-    last_conv2d_layer = net['conv2d5']
-    net['reshape'] = lasagne.layers.ReshapeLayer(last_conv2d_layer, (nvoxgrids, 1, res, res, res))
-    net['conv3d1'] = batch_norm(Conv3DLayer(net['reshape'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same', flip_filters=False))
-    net['conv3d2'] = batch_norm(Conv3DLayer(net['conv3d1'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same'))
-    net['conv3d3'] = batch_norm(Conv3DLayer(net['conv3d2'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'),  pad='same'))
-    net['conv3d4'] = batch_norm(Conv3DLayer(net['conv3d3'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same', flip_filters=False))
-    net['conv3d5'] = batch_norm(Conv3DLayer(net['conv3d4'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same'))
-    net['conv3d6'] = batch_norm(Conv3DLayer(net['conv3d5'], 4, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'),  pad='same'))
 
-    last_conv3d_layer = net['conv3d6']
-    net['pooled'] = lasagne.layers.FeaturePoolLayer(last_conv3d_layer,4, pool_function=T.mean)
-    net['voxels'] = lasagne.layers.ReshapeLayer(net['pooled'], (nvoxgrids, res, res, res))
+    # First Block
+    net['input'] = prev_layer = InputLayer((None, 1, width, height), input_var = first_img)
+    net['resize_conv1'] = prev_layer = batch_norm(ConvLayer(prev_layer, num_filters=res/4, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
+    net['resize_conv2'] = prev_layer = batch_norm(ConvLayer(prev_layer, num_filters=res/2, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
+    net['resize_conv3'] = prev_layer = batch_norm(ConvLayer(prev_layer, num_filters=res, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
+
+    # Projection to higher dim for residual (must be same dim)
+    wx = batch_norm(ConvLayer(net['input'], num_filters=res, filter_size=1, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
+    net['resizeblock'] = prev_layer = x = lasagne.layers.ElemwiseSumLayer([wx, prev_layer])
+    # FIXME, this resizing aint gonna happen is it
+
+    # 2d convolutional blocks
+    n2dblocks = 5
+    nin2dblock = 2
+    for j in range(n2dblocks):
+        for i in range(nin2dblock):
+            net['conv2d%s_%s' % (j,i)] = prev_layer = batch_norm(ConvLayer(prev_layer, num_filters=res, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same'))
+        net['block2d%s' % j] = x = lasagne.layers.ElemwiseSumLayer([prev_layer, x])
+
+    # 3d convolutional blocks
+    n3dblocks = 3
+    nin3dblock = 2
+    n_3d_features = 4
+    net['reshape'] = prev_layer = x = lasagne.layers.ReshapeLayer(prev_layer, (nvoxgrids, 1, res, res, res))
+    x = batch_norm(Conv3DLayer(x, num_filters=n_3d_features, filter_size=1, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
+
+    for j in range(n3dblocks):
+        for i in range(nin3dblock):
+            net['conv3d%s_%s' % (j,i)] = prev_layer = batch_norm(Conv3DLayer(prev_layer, n_3d_features, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same', flip_filters=False))
+        net['block3d%s' % j] = x = lasagne.layers.ElemwiseSumLayer([prev_layer, x])
+
+    net['final_conv3d1'] = prev_layer = batch_norm(Conv3DLayer(prev_layer, 1, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same', flip_filters=False))
+    # net['final_conv3d2'] = prev_layer = batch_norm(Conv3DLayer(prev_layer, 1, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same', flip_filters=False))
+    net['voxels'] = lasagne.layers.ReshapeLayer(prev_layer, (nvoxgrids, res, res, res))
     output_layer = net['voxels']
     outputs = {}
     voxels = lasagne.layers.get_output(output_layer)
@@ -222,12 +243,12 @@ def get_updates(loss, output_layer, options):
     return updates
 
 def build_conv_net(views, shape_params, outputs, selected_outputs, updates, mode = curr_mode):
-    print "Building ConvNet with outputs", selected_outputs
+    print("Building ConvNet with outputs", selected_outputs)
     outputs_list = [outputs[so] for so in selected_outputs]
     return function([views, shape_params], outputs_list, updates = updates, mode=mode)
 
 def load_parameters(output_layer, params_file):
-    print "Loading Params", params_file
+    print("Loading Params", params_file)
     param_values = np.load(params_file)['param_values']
     lasagne.layers.set_all_param_values(output_layer, param_values)
 
@@ -252,7 +273,7 @@ def mk_dir():
     datadir = os.environ['DATADIR']
     newdirname = str(time.time())
     full_dir_name = os.path.join(datadir, newdirname)
-    print "Data will be saved to", full_dir_name
+    print("Data will be saved to", full_dir_name)
     os.mkdir(full_dir_name)
     return full_dir_name
 
@@ -260,16 +281,16 @@ def loss_data(filenames, nviews, render, f):
     voxel_data = [load_voxels_binary(v, 128, 128, 128, zoom = 0.5)*10.0 for v in filenames]
     voxel_dataX = [np.array(v,dtype=config.floatX) for v in voxel_data]
     r = rand_rotation_matrices(nviews)
-    print "Rendering Training Data"
+    print("Rendering Training Data")
     imgdata = render(voxel_dataX, r)
-    print "Computing Net"
+    print("Computing Net")
     return f(imgdata[0], voxel_dataX)
 
 def train(cost_f, val_f, render,  output_layer, options, test_files = [], train_files = [], save_data = True, save_every = 10,
           validate = False, validate_every = 50, fail_on_except = False, to_print = [],
           to_save = [], output_keys = []):
     """Learn Parameters for Neural Network"""
-    print "Training"
+    print("Training")
     width = options['width']
     height = options['height']
     res = options['res']
@@ -293,27 +314,27 @@ def train(cost_f, val_f, render,  output_layer, options, test_files = [], train_
     nminibatches = len(train_files) / nvoxgrids
 
     for i in range(nepochs):
-        print "epoch: ", i, " of ", nepochs
+        print("epoch: ", i, " of ", nepochs)
         j = 0
         for fnames in iterate_minibatches(train_files, nvoxgrids, shuffle=True):
             runtime_params['filenames'] = fnames
-            print "epoch: ", i, " of ", nepochs, " - minibatch ", j, " of ", nminibatches
+            print("epoch: ", i, " of ", nepochs, " - minibatch ", j, " of ", nminibatches)
             try:
                 outputs_dict = loss_data(fnames, nviews, render, cost_f)
                 runtime_params.update(outputs_dict)
                 for key in to_print:
-                    print "%s: " % key, outputs_dict[key]
+                    print("%s: " % key, outputs_dict[key])
                 # Validation
                 if validate and j % validate_every == 0:
-                    print "Assessing Validation Error"
+                    print("Assessing Validation Error")
                     val_minibatch_size = nvoxgrids
                     val_losses = []
                     for fnames in iterate_minibatches(test_files, val_minibatch_size):
                         loss = loss_data(fnames, nviews, render, val_f)['loss']
                         val_losses.append(loss)
-                        print "validation loss: ", loss
+                        print("validation loss: ", loss)
                     runtime_params['val_loss'] = np.mean(val_losses)
-                    print "test mean, median, variance loss:", runtime_params['val_loss'], np.median(val_losses), np.var(val_losses)
+                    print("test mean, median, variance loss:", runtime_params['val_loss'], np.median(val_losses), np.var(val_losses))
 
                 if save_data and j % save_every == 0:
                     fname = "epoch%sbatch%s" % (i, j)
@@ -329,8 +350,8 @@ def train(cost_f, val_f, render,  output_layer, options, test_files = [], train_
                 if fail_on_except:
                     raise e
                 else:
-                    print "Got error: ", e
-                    print "continuing"
+                    print("Got error: ", e)
+                    print("continuing")
 
 def main(argv):
     ## Args
@@ -343,12 +364,12 @@ def main(argv):
     nviews = options['nviews'] = 1
     nepochs = options['nepochs'] = 10000
 
-    print options
+    print(options)
 
     rotation_matrices = T.tensor3()
     shape_params = T.tensor4()
     out = gen_img(shape_params, rotation_matrices, width, height, nsteps, res)
-    print "Compiling Render Function"
+    print("Compiling Render Function")
     render = function([shape_params, rotation_matrices], out, mode=curr_mode)
 
     ## Training Function
@@ -383,7 +404,7 @@ def main(argv):
     to_save = ['loss', 'voxels', 'val_loss', 'filenames', 'param_values',
                'width', 'height', 'res', 'nsteps', 'nvoxgrids', 'nviews',
                'nepochs', 'learning_rate', 'momentum']
-    
+
     # Kinds of things I want to savea, (1) Output from function (2) Parameters (3) Constant values
     test_files = filter(lambda x:x.endswith(".raw") and "test" in x, get_filepaths(os.getenv('HOME') + '/data/ModelNet40'))
     train_files = filter(lambda x:x.endswith(".raw") and "train" in x, get_filepaths(os.getenv('HOME') + '/data/ModelNet40'))
