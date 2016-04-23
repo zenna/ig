@@ -26,7 +26,7 @@ import lasagne
 from permute import PermuteLayer, Eye
 from nonlinearities import *
 
-theano.config.optimizer = 'fast_compile'
+# theano.config.optimizer = 'fast_compile'
 
 
 # ################## Download and prepare the MNIST dataset ##################
@@ -573,8 +573,8 @@ def main(model='mlp', num_epochs=5):
         for batch in iterate_minibatches(X_train, y_train, 500, shuffle=True):
             inputs, targets = batch
             currbatchsize = inputs.shape[0]
-            p1 = np.random.rand(currbatchsize)
-            p2 = np.random.rand(currbatchsize, 28*28-10)
+            p1 = np.array(np.random.rand(currbatchsize), dtype=T.config.floatX)
+            p2 = np.array(np.random.rand(currbatchsize, 28*28-10), dtype=T.config.floatX)
             output = train_fn(inputs, targets, p1, p2)
             train_err += output[0]
             print(output)
