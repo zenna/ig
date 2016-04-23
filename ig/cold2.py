@@ -37,7 +37,7 @@ from theano.compile.nanguardmode import NanGuardMode
 curr_mode = None
 # curr_mode = NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
 # config.optimizer='fast_compile'
-# config.optimizer='None'
+config.optimizer='None'
 
 # Genereate values in raster space, x[i,j] = [i,j]
 def gen_fragcoords(width, height):
@@ -178,7 +178,7 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 128, heigh
     net = {}
 
     # First Block
-    net['input'] = prev_layer = InputLayer((None, 1, width, height), input_var = first_img)
+    net['input']     = prev_layer = InputLayer((None, 1, width, height), input_var = first_img)
     net['resize_conv1'] = prev_layer = batch_norm(ConvLayer(prev_layer, num_filters=res/4, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
     net['resize_conv2'] = prev_layer = batch_norm(ConvLayer(prev_layer, num_filters=res/2, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
     net['resize_conv3'] = prev_layer = batch_norm(ConvLayer(prev_layer, num_filters=res, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
@@ -189,7 +189,7 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 128, heigh
     # FIXME, this resizing aint gonna happen is it
 
     # 2d convolutional blocks
-    n2dblocks = 5
+    n2dblocks = 3
     nin2dblock = 2
     for j in range(n2dblocks):
         for i in range(nin2dblock):
@@ -242,10 +242,10 @@ def get_updates(loss, output_layer, options):
         updates = lasagne.updates.rmsprop(loss, params, learning_rate=options['learning_rate'])
     return updates
 
-def build_conv_net(views, shape_params, outputs, selected_outputs, updates, mode = curr_mode):
+def compile_conv_net(views, shape_params, outputs, selected_outputs, updates, mode = curr_mode, **kwargs):
     print("Building ConvNet with outputs", selected_outputs)
     outputs_list = [outputs[so] for so in selected_outputs]
-    return function([views, shape_params], outputs_list, updates = updates, mode=mode)
+    return function([views, shape_params], outputs_list, updates = updates, mode=mode, **kwargs)
 
 def load_parameters(output_layer, params_file):
     print("Loading Params", params_file)
@@ -277,6 +277,9 @@ def mk_dir():
     os.mkdir(full_dir_name)
     return full_dir_name
 
+def make_dict_output(f, dict):
+    lambda x: f(x)
+
 def loss_data(filenames, nviews, render, f):
     voxel_data = [load_voxels_binary(v, 128, 128, 128, zoom = 0.5)*10.0 for v in filenames]
     voxel_dataX = [np.array(v,dtype=config.floatX) for v in voxel_data]
@@ -301,6 +304,8 @@ def train(cost_f, val_f, render,  output_layer, options, test_files = [], train_
     load_params = options['load_params']
     params_file = options['params_file']
 
+    full_dir_name = ""
+
     if save_data:
         full_dir_name = mk_dir()
         save_dict_csv(os.path.join(full_dir_name, "options.csv"), options)
@@ -318,7 +323,7 @@ def train(cost_f, val_f, render,  output_layer, options, test_files = [], train_
         j = 0
         for fnames in iterate_minibatches(train_files, nvoxgrids, shuffle=True):
             runtime_params['filenames'] = fnames
-            print("epoch: ", i, " of ", nepochs, " - minibatch ", j, " of ", nminibatches)
+            print("epoch: ", i, " of ", nepochs, " - minibatch ", j, " of ", nminibatches, " ", full_dir_name)
             try:
                 outputs_dict = loss_data(fnames, nviews, render, cost_f)
                 runtime_params.update(outputs_dict)
@@ -355,6 +360,11 @@ def train(cost_f, val_f, render,  output_layer, options, test_files = [], train_
 
 def main(argv):
     ## Args
+    global options
+    global render
+    global test_files, train_files
+    global net, output_layer, cost_f, cost_f_dict, val_f, call_f, call_f_dict
+
     options = handle_args(argv)
     width = options['width'] = 64
     height = options['height'] = 64
@@ -387,7 +397,8 @@ def main(argv):
     outputs.update({'voxels': voxels})
 
     selected_outputs = ['loss', 'voxels'] #+ net.keys()
-    cost_f = build_conv_net(views, shape_params, outputs, selected_outputs, updates)
+    print("Compiling Training Function")
+    cost_f = compile_conv_net(views, shape_params, outputs, selected_outputs, updates)
     cost_f_dict = named_outputs(cost_f, ['loss', 'voxels'])
 
     ## Validation Function
@@ -397,13 +408,19 @@ def main(argv):
     outputs.update({'val_loss' : val_loss})
     # outputs.update({'val_loss1' : val_loss1})
     # outputs.update({'val_loss2' : val_loss2})
-    val_f = build_conv_net(views, shape_params, outputs, ['loss'], None)
+    print("Compiling Validation Function")
+    val_f = compile_conv_net(views, shape_params, outputs, ['loss'], None)
     val_f_dict = named_outputs(cost_f, ['loss', 'voxels'])
 
     to_print = ['loss']
     to_save = ['loss', 'voxels', 'val_loss', 'filenames', 'param_values',
                'width', 'height', 'res', 'nsteps', 'nvoxgrids', 'nviews',
                'nepochs', 'learning_rate', 'momentum']
+
+    ## Call function
+    print("Compiling Calling Function")
+    call_f = compile_conv_net(views, shape_params, outputs, net.keys(), None, on_unused_input='warn')
+    call_f_dict = named_outputs(call_f, net.keys())
 
     # Kinds of things I want to savea, (1) Output from function (2) Parameters (3) Constant values
     test_files = filter(lambda x:x.endswith(".raw") and "test" in x, get_filepaths(os.getenv('HOME') + '/data/ModelNet40'))
