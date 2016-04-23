@@ -462,7 +462,7 @@ def bound_loss(x, tnp = np) :
 # more functions to better separate the code, but it wouldn't make it any
 # easier to read.
 
-def main(model='mlp', num_epochs=5):
+def main(model='mlp', num_epochs=2):
     # Load the dataset
     print("Loading data...")
     X_train, y_train, X_val, y_val, X_test, y_test = load_dataset()
@@ -573,9 +573,9 @@ def main(model='mlp', num_epochs=5):
         for batch in iterate_minibatches(X_train, y_train, 500, shuffle=True):
             inputs, targets = batch
             currbatchsize = inputs.shape[0]
-            p1 = np.array(np.random.rand(currbatchsize), dtype=T.config.floatX)
-            p2 = np.array(np.random.rand(currbatchsize, 28*28-10), dtype=T.config.floatX)
-            output = train_fn(inputs, targets, p1, p2)
+            p1dat = np.array(np.random.rand(currbatchsize), dtype=T.config.floatX)
+            p2dat = np.array(np.random.rand(currbatchsize, 28*28-10), dtype=T.config.floatX)
+            output = train_fn(inputs, targets, p1dat, p2dat)
             train_err += output[0]
             print(output)
             train_batches += 1
@@ -624,7 +624,7 @@ def main(model='mlp', num_epochs=5):
     # Optionally, you could now dump the network weights to a file like this:
     np.savez('model.npz', *lasagne.layers.get_all_param_values(network))
     global inv_f
-    inv_f = theano.function([y,p1,p2], inv_outputs)
+    inv_f = theano.function([input_var,p1,p2], inv_outputs)
     #
     # And load them again later on like this:
 
