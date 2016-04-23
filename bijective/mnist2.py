@@ -515,14 +515,14 @@ def main(model='mlp', num_epochs=5):
     ## Inverse Loss
     inv_op = lasagne.layers.get_output(inv_network)
     # # Inversion should be within the training set bounds
-    bl1 = bound_loss(inv_op, tnp = T).mean()
+    bl1 = bound_loss(inv_op, tnp = T).mean()/10000
 
     # # Parameter should be within some reasonable bounds.
     p_op = lasagne.layers.get_output(network_layers[2])
-    bl2 = bound_loss(p_op, tnp = T).mean()
+    # bl2 = bound_loss(p_op, tnp = T).mean()/10000
 
-    total_loss = bl1 + bl2 + loss
-
+    total_loss = bl1 + loss
+    # total_loss = loss
 
 
     # Create update expressions for training, i.e., how to modify the
@@ -532,7 +532,7 @@ def main(model='mlp', num_epochs=5):
     # updates = lasagne.updates.nesterov_momentum(
     #         loss, params, learning_rate=0.01, momentum=0.9)
     updates = lasagne.updates.momentum(
-        total_loss, params, learning_rate=0.01, momentum=0.9)
+        total_loss, params, learning_rate=0.001, momentum=0.9)
 
     # Create a loss expression for validation/testing. The crucial difference
     # here is that we do a deterministic forward pass through the network,
@@ -547,7 +547,7 @@ def main(model='mlp', num_epochs=5):
 
     # Compile a function performing a training step on a mini-batch (by giving
     # the updates dictionary) and returning the corresponding training loss:
-    train_fn = theano.function([input_var, target_var, p1, p2], loss, updates=updates)
+    train_fn = theano.function([input_var, target_var, p1, p2], [loss, bl1, total_loss], updates=updates)
 
     # Compile a second function computing the validation loss and accuracy:
     val_fn = theano.function([input_var, target_var], [test_loss, test_acc])
@@ -575,7 +575,9 @@ def main(model='mlp', num_epochs=5):
             currbatchsize = inputs.shape[0]
             p1 = np.random.rand(currbatchsize)
             p2 = np.random.rand(currbatchsize, 28*28-10)
-            train_err += train_fn(inputs, targets, p1, p2)
+            output = train_fn(inputs, targets, p1, p2)
+            train_err += output[0]
+            print(output)
             train_batches += 1
             if j == 0:
                 print("maxmin", np.max(inputs), np.min(inputs))
