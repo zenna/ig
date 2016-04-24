@@ -462,7 +462,7 @@ def bound_loss(x, tnp = np) :
 # more functions to better separate the code, but it wouldn't make it any
 # easier to read.
 
-def main(model='mlp', num_epochs=2):
+def main(model='mlp', num_epochs=75):
     # Load the dataset
     print("Loading data...")
     X_train, y_train, X_val, y_val, X_test, y_test = load_dataset()
@@ -555,6 +555,9 @@ def main(model='mlp', num_epochs=2):
     # For calling the damn thing and getting some output
     call_fn = theano.function([input_var], outputs)
 
+    global inv_f
+    inv_f = theano.function([input_var,p1,p2], inv_outputs)
+
     print("Loading Params")
     # with np.load('model.npz') as f:
     #     param_values = [f['arr_%d' % i] for i in range(len(f.files))]
@@ -623,8 +626,7 @@ def main(model='mlp', num_epochs=2):
 
     # Optionally, you could now dump the network weights to a file like this:
     np.savez('model.npz', *lasagne.layers.get_all_param_values(network))
-    global inv_f
-    inv_f = theano.function([input_var,p1,p2], inv_outputs)
+
     #
     # And load them again later on like this:
 
@@ -658,7 +660,7 @@ def test():
     ydat = out[-1]
     p1dat = np.array([0.5], dtype=T.config.floatX)
     p2dat = np.array(np.random.rand(1,28*28-10),dtype=T.config.floatX)
-    iout = inv_f(ydat,p1dat,p2dat)
+    iout = inv_f2(X_train[3339].reshape(1,1,28,28),p1dat,p2dat)
     fuzz = iout[-1].reshape(1,1,28,28)
     outout = call_fn(fuzz)
 
