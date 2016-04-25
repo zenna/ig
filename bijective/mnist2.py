@@ -25,7 +25,11 @@ import theano.tensor as T
 import lasagne
 from permute import PermuteLayer, Eye
 from nonlinearities import *
+from theano.compile.nanguardmode import NanGuardMode
 
+curr_mode = None
+# curr_mode = NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
+# theano.config.optimizer = 'None'
 # theano.config.optimizer = 'fast_compile'
 
 
@@ -462,7 +466,7 @@ def bound_loss(x, tnp = np) :
 # more functions to better separate the code, but it wouldn't make it any
 # easier to read.
 
-def main(model='mlp', num_epochs=75):
+def main(model='mlp', num_epochs=500):
     # Load the dataset
     print("Loading data...")
     X_train, y_train, X_val, y_val, X_test, y_test = load_dataset()
@@ -532,7 +536,9 @@ def main(model='mlp', num_epochs=75):
     # updates = lasagne.updates.nesterov_momentum(
     #         loss, params, learning_rate=0.01, momentum=0.9)
     updates = lasagne.updates.momentum(
-        total_loss, params, learning_rate=0.001, momentum=0.9)
+        total_loss, params, learning_rate=0.001
+
+        , momentum=0.9)
 
     # Create a loss expression for validation/testing. The crucial difference
     # here is that we do a deterministic forward pass through the network,
@@ -547,16 +553,16 @@ def main(model='mlp', num_epochs=75):
 
     # Compile a function performing a training step on a mini-batch (by giving
     # the updates dictionary) and returning the corresponding training loss:
-    train_fn = theano.function([input_var, target_var, p1, p2], [loss, bl1, total_loss], updates=updates)
+    train_fn = theano.function([input_var, target_var, p1, p2], [loss, bl1, total_loss], updates=updates, mode=curr_mode)
 
     # Compile a second function computing the validation loss and accuracy:
-    val_fn = theano.function([input_var, target_var], [test_loss, test_acc])
+    val_fn = theano.function([input_var, target_var], [test_loss, test_acc], mode=curr_mode)
 
     # For calling the damn thing and getting some output
-    call_fn = theano.function([input_var], outputs)
+    call_fn = theano.function([input_var], outputs, mode=curr_mode)
 
     global inv_f
-    inv_f = theano.function([input_var,p1,p2], inv_outputs)
+    inv_f = theano.function([input_var,p1,p2], inv_outputs, mode=curr_mode)
 
     print("Loading Params")
     # with np.load('model.npz') as f:
@@ -660,7 +666,7 @@ def test():
     ydat = out[-1]
     p1dat = np.array([0.5], dtype=T.config.floatX)
     p2dat = np.array(np.random.rand(1,28*28-10),dtype=T.config.floatX)
-    iout = inv_f2(X_train[3339].reshape(1,1,28,28),p1dat,p2dat)
+    iout = inv_f(X_train[3339].reshape(1,1,28,28),p1dat,p2dat)
     fuzz = iout[-1].reshape(1,1,28,28)
     outout = call_fn(fuzz)
 
