@@ -30,14 +30,16 @@ from theano import tensor as T
 from theano import function, config, shared
 import pickle
 
-# from lasagne.layers import batch_norm
-def batch_norm(x): return x
+from lasagne.nonlinearities import rectify
+
+from lasagne.layers import batch_norm
+# def batch_norm(x): return x
 
 from theano.compile.nanguardmode import NanGuardMode
 curr_mode = None
 # curr_mode = NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
 # config.optimizer='fast_compile'
-config.optimizer='None'
+# config.optimizer='None'
 
 # Genereate values in raster space, x[i,j] = [i,j]
 def gen_fragcoords(width, height):
@@ -179,37 +181,37 @@ def second_order(rotation_matrices, imagebatch, shape_params, width = 128, heigh
 
     # First Block
     net['input']     = prev_layer = InputLayer((None, 1, width, height), input_var = first_img)
-    net['resize_conv1'] = prev_layer = batch_norm(ConvLayer(prev_layer, num_filters=res/4, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
-    net['resize_conv2'] = prev_layer = batch_norm(ConvLayer(prev_layer, num_filters=res/2, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
-    net['resize_conv3'] = prev_layer = batch_norm(ConvLayer(prev_layer, num_filters=res, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
+    net['resize_conv1'] = prev_layer = batch_norm(ConvLayer(prev_layer, num_filters=res/4, filter_size=5, nonlinearity = rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
+    net['resize_conv2'] = prev_layer = batch_norm(ConvLayer(prev_layer, num_filters=res/2, filter_size=5, nonlinearity = rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
+    net['resize_conv3'] = prev_layer = batch_norm(ConvLayer(prev_layer, num_filters=res, filter_size=5, nonlinearity = rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
 
     # Projection to higher dim for residual (must be same dim)
-    wx = batch_norm(ConvLayer(net['input'], num_filters=res, filter_size=1, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
+    wx = batch_norm(ConvLayer(net['input'], num_filters=res, filter_size=1, nonlinearity = rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
     net['resizeblock'] = prev_layer = x = lasagne.layers.ElemwiseSumLayer([wx, prev_layer])
     # FIXME, this resizing aint gonna happen is it
 
     # 2d convolutional blocks
-    n2dblocks = 3
+    n2dblocks = 7
     nin2dblock = 2
     for j in range(n2dblocks):
         for i in range(nin2dblock):
-            net['conv2d%s_%s' % (j,i)] = prev_layer = batch_norm(ConvLayer(prev_layer, num_filters=res, filter_size=5, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same'))
-        net['block2d%s' % j] = x = lasagne.layers.ElemwiseSumLayer([prev_layer, x])
+            net['conv2d%s_%s' % (j,i)] = prev_layer = batch_norm(ConvLayer(prev_layer, num_filters=res, filter_size=5, nonlinearity = rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same'))
+        net['block2d%s' % j] = x = prev_layer = lasagne.layers.ElemwiseSumLayer([prev_layer, x])
 
     # 3d convolutional blocks
     n3dblocks = 3
     nin3dblock = 2
     n_3d_features = 4
     net['reshape'] = prev_layer = x = lasagne.layers.ReshapeLayer(prev_layer, (nvoxgrids, 1, res, res, res))
-    x = batch_norm(Conv3DLayer(x, num_filters=n_3d_features, filter_size=1, nonlinearity = lasagne.nonlinearities.rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
+    x = batch_norm(Conv3DLayer(x, num_filters=n_3d_features, filter_size=1, nonlinearity = rectify, W=lasagne.init.HeNormal(gain='relu'), pad='same' ))
 
     for j in range(n3dblocks):
         for i in range(nin3dblock):
-            net['conv3d%s_%s' % (j,i)] = prev_layer = batch_norm(Conv3DLayer(prev_layer, n_3d_features, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same', flip_filters=False))
-        net['block3d%s' % j] = x = lasagne.layers.ElemwiseSumLayer([prev_layer, x])
+            net['conv3d%s_%s' % (j,i)] = prev_layer = batch_norm(Conv3DLayer(prev_layer, n_3d_features, (3,3,3), nonlinearity=rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same', flip_filters=False))
+        net['block3d%s' % j] = x = prev_layer = lasagne.layers.ElemwiseSumLayer([prev_layer, x])
 
-    net['final_conv3d1'] = prev_layer = batch_norm(Conv3DLayer(prev_layer, 1, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same', flip_filters=False))
-    # net['final_conv3d2'] = prev_layer = batch_norm(Conv3DLayer(prev_layer, 1, (3,3,3), nonlinearity=lasagne.nonlinearities.rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same', flip_filters=False))
+    net['final_conv3d1'] = prev_layer = batch_norm(Conv3DLayer(prev_layer, 1, (3,3,3), nonlinearity=rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same', flip_filters=False))
+    # net['final_conv3d2'] = prev_layer = batch_norm(Conv3DLayer(prev_layer, 1, (3,3,3), nonlinearity=rectify,W=lasagne.init.HeNormal(gain='relu'), pad='same', flip_filters=False))
     net['voxels'] = lasagne.layers.ReshapeLayer(prev_layer, (nvoxgrids, res, res, res))
     output_layer = net['voxels']
     outputs = {}
@@ -364,6 +366,8 @@ def main(argv):
     global render
     global test_files, train_files
     global net, output_layer, cost_f, cost_f_dict, val_f, call_f, call_f_dict
+    global views, shape_params, outputs, net
+
 
     options = handle_args(argv)
     width = options['width'] = 64
@@ -418,9 +422,9 @@ def main(argv):
                'nepochs', 'learning_rate', 'momentum']
 
     ## Call function
-    print("Compiling Calling Function")
-    call_f = compile_conv_net(views, shape_params, outputs, net.keys(), None, on_unused_input='warn')
-    call_f_dict = named_outputs(call_f, net.keys())
+    # print("Compiling Calling Function")
+    # call_f = compile_conv_net(views, shape_params, outputs, net.keys(), None, on_unused_input='warn')
+    # call_f_dict = named_outputs(call_f, net.keys())
 
     # Kinds of things I want to savea, (1) Output from function (2) Parameters (3) Constant values
     test_files = filter(lambda x:x.endswith(".raw") and "test" in x, get_filepaths(os.getenv('HOME') + '/data/ModelNet40'))
