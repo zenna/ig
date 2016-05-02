@@ -13,6 +13,7 @@ a separate repository: https://github.com/Lasagne/Recipes
 """
 
 from __future__ import print_function
+from theano import printing
 from theano.tensor.nlinalg import matrix_inverse
 import sys
 import os
@@ -29,9 +30,9 @@ from permute import PermuteLayer, Eye
 from nonlinearities import *
 from theano.compile.nanguardmode import NanGuardMode
 from lasagne.regularization import regularize_layer_params, l2
-
-
-curr_mode = None
+theano.config.optimizer = 'None'
+curr_mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=False)
+# curr_mode = None
 
 forward_nonlinearity = leaky_rectify
 inv_nonlinearity = inv_leaky_rectify
@@ -161,6 +162,7 @@ def build_inv_mlp(input_var=None, param_var=None):
     call_fn = theano.function([input_var], out_tensor_vals, mode=curr_mode)
 
     # y = T.matrix("y")
+    # y = printing.Print('y')(out_tensor)
     y = out_tensor
     p1 = T.vector("p1")
     p2 = T.matrix("p2")
@@ -205,10 +207,35 @@ def bound_loss(x, tnp = np) :
 def inv_batch_norm(y, mean, inv_sigma, beta, gamma):
     return (y - beta)/(gamma * inv_sigma) + mean
 
+def get_update_state(updates, update_indices):
+    return [updates.keys()[i].get_value() for i in update_indices]
+
+def set_update_state(updates, update_indices, update_state):
+    j = 0
+    for i in update_indices:
+        keys = updates.keys()
+        keys[i].set_value(update_state[j])
+        j = j + 1
+
+def save_update_state(updates, fname, indices):
+    update_state = get_update_state(updates, indices)
+    np.savez_compressed(fname, *update_state)
+
+def load_update_state(updates, fname, indices):
+    loaded_update_state = np.load(fname)
+    as_array = npz_to_array(loaded_update_state)
+    print("sums", [np.sum(x) for x in as_array])
+    set_update_state(updates, indices, as_array)
+
+def npz_to_array(npzfile):
+    nitems = len(npzfile.keys())
+    return [npzfile['arr_%s' % i]  for i in range(nitems)]
+
 def main(model='mlp', num_epochs=500):
     # Load the dataset
     print("Loading data...")
     X_train, y_train, X_val, y_val, X_test, y_test = load_dataset()
+    X_train = X_train + np.array(np.random.rand(*X_train.shape)/256.0, dtype='float32')
 
     # Prepare Theano variables for inputs and targets
     input_var = T.tensor4('inputs')
@@ -260,8 +287,8 @@ def main(model='mlp', num_epochs=500):
     inv_op = lasagne.layers.get_output(inv_network)
     # # Inversion should be within the training set bounds
     blx = bound_loss(inv_op, tnp = T)
-    bl1 = blx.mean()/100
-    bl2 = blx.max()/100
+    bl1 = blx.mean()
+    # bl2 = blx.max()
 
     # # Parameter should be within some reasonable bounds.
     # p_op = lasagne.layers.get_output(network_layers[2])
@@ -269,25 +296,29 @@ def main(model='mlp', num_epochs=500):
     l2_penalty_1 = regularize_layer_params(network_layers[1], l2)
     l2_penalty_2 = regularize_layer_params(network_layers[2], l2)
 
-    total_loss = bl1 + bl2 + loss# + l2_penalty_1 + l2_penalty_2
-
-    losses = [loss, bl1, bl2, total_loss] #, l2_penalty_1, l2_penalty_2, total_loss]
+    total_loss = loss + bl1 # + bl2# + loss# + l2_penalty_1 + l2_penalty_2
+    losses = [loss, bl1, total_loss]
+    # losses = [loss, bl1, bl2, total_loss] #, l2_penalty_1, l2_penalty_2, total_loss]
     print(losses)
     # total_loss = loss
-
-
-    # Create update expressions for training, i.e., how to modify the
-    # parameters at each training step. Here, we'll use Stochastic Gradient
-    # Descent (SGD) with Nesterov momentum, but Lasagne offers plenty more.
     params = lasagne.layers.get_all_params(network, trainable=True)
+    all_params = lasagne.layers.get_all_params(network)
+    print("params", params)
+    print("all params", all_params)
+    data = np.load("/home/zenna/data/sandbox/1462201659.61epoch13.npz")
+    param_values = [data['arr_%s' % i]  for i in range(10)]
+    lasagne.layers.set_all_param_values(network, param_values)
     # updates = lasagne.updates.nesterov_momentum(
     #         loss, params, learning_rate=0.01, momentum=0.9)
+    global updates
     updates = lasagne.updates.adam(
-        total_loss, params, learning_rate=1e-3)
+        total_loss, params, learning_rate=5e-4)
     # updates = lasagne.updates.momentum(
-    #     total_loss, params, learning_rate=0.1)
+    #     total_loss, params, learning_rate=1e-5)
     # updates = lasagne.updates.adagrad(total_loss, params)
 
+    ## Reload optimisation Parameters
+    update_indices = [0,1,3,4,6,7,9,10,12,13,15]
 
     # Create a loss expression for validation/testing. The crucial difference
     # here is that we do a deterministic forward pass through the network,
@@ -302,7 +333,9 @@ def main(model='mlp', num_epochs=500):
 
     # Compile a function performing a training step on a mini-batch (by giving
     # the updates dictionary) and returning the corresponding training loss:
-    train_fn = theano.function([input_var, target_var, p1, p2], losses, updates=updates, mode=curr_mode)
+    global train_fn
+    train_fn = theano.function([input_var, target_var, p1, p2], losses, updates=updates, mode=curr_mode, on_unused_input='warn')
+    load_update_state(updates, "/home/zenna/data/sandbox/1462201659.61_updates12_100.npz", update_indices)
 
     # Compile a second function computing the validation loss and accuracy:
     val_fn = theano.function([input_var, target_var], [test_loss, test_acc], mode=curr_mode)
@@ -316,27 +349,32 @@ def main(model='mlp', num_epochs=500):
     # Finally, launch the training loop.
     print("Starting training...")
     # We iterate over epochs:
+    atime = time.time()
     for epoch in range(num_epochs):
         # In each epoch, we do a full pass over the training data:
         train_err = 0
         train_batches = 0
         start_time = time.time()
         j = 0
-        atime = time.time()
-        for batch in iterate_minibatches(X_train, y_train, 500, shuffle=True):
+        print(atime)
+        param_values = lasagne.layers.get_all_param_values(network)
+        np.savez_compressed("/home/zenna/data/sandbox/%sepoch%s" % (atime, epoch), *param_values)
+
+        batch_size = 500
+
+        for batch in iterate_minibatches(X_train, y_train, batch_size, shuffle=True):
             inputs, targets = batch
             currbatchsize = inputs.shape[0]
             p1dat = np.array(np.random.rand(currbatchsize), dtype=T.config.floatX)
             p2dat = np.array(np.random.rand(currbatchsize, 28*28-10), dtype=T.config.floatX)
             output = train_fn(inputs, targets, p1dat, p2dat)
-            param_values = lasagne.layers.get_all_param_values(network)
-            # np.savez_compressed("/home/zenna/data/sandbox/%sepoch%s_%s" % (atime, epoch, j), *param_values)
             train_err += output[0]
             print(output)
             train_batches += 1
             if j == 0:
                 print("maxmin", np.max(inputs), np.min(inputs))
             j = j + 1
+            save_update_state(updates, "/home/zenna/data/sandbox/%s_updates%s_%s.npz" % (atime, epoch, j), update_indices)
 
         # And a full pass over the validation data:
         val_err = 0
@@ -406,15 +444,18 @@ if __name__ == '__main__':
 
 def test():
     X_train, y_train, X_val, y_val, X_test, y_test = load_dataset()
-    inp_img = X_train[10].reshape(1,1,28,28)
-    out = call_fn(inp_img)
-    def softmax(x): return np.array(np.exp(x)/np.sum(np.exp(x)), dtype=T.config.floatX)
-    ydat = out[-1]
-    p1dat = np.array([0.5], dtype=T.config.floatX)
-    p2dat = np.array(np.random.rand(1,28*28-10),dtype=T.config.floatX)
-    iout = inv_fn(ydat,p1dat,p2dat)
-    fuzz = iout[-1].reshape(1,1,28,28)
-    outout = call_fn(fuzz)
+    def ok(i):
+        inp_img = X_train[i].reshape(1,1,28,28)
+        out = call_fn(inp_img)
+        def softmax(x): return np.array(np.exp(x)/np.sum(np.exp(x)), dtype=T.config.floatX)
+        ydat = out[-1]
+        p1dat = np.array([0.5], dtype=T.config.floatX)
+        p2dat = np.array(np.random.rand(1,28*28-10),dtype=T.config.floatX)
+        iout = inv_fn(ydat,p1dat,p2dat)
+        fuzz = iout[-1].reshape(1,1,28,28)
+        outout = call_fn(fuzz)
+        return out, outout, iout, fuzz
+    out, outout, iout, fuzz = ok(0)
     reconstruction = outout[-1]
     inv_is_is_working = np.sum(np.abs((reconstruction - ydat))) # should be zero!
 
