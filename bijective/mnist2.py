@@ -22,10 +22,14 @@ import numpy as np
 import theano
 import theano.tensor as T
 
+from invbatchnorm import *
+
 import lasagne
 from permute import PermuteLayer, Eye
 from nonlinearities import *
 from theano.compile.nanguardmode import NanGuardMode
+from lasagne.regularization import regularize_layer_params, l2
+
 
 curr_mode = None
 # curr_mode = NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
@@ -131,38 +135,7 @@ def build_mlp(input_var=None):
     l_out = lasagne.layers.NonlinearityLayer(l_slice, nonlinearity = lasagne.nonlinearities.softmax)
     return l_out
 
-def build_inv_mlp(input_var=None, param_var=None):
-    network_layers = []
-    l0 = lasagne.layers.InputLayer(shape=(None, 1, 28, 28),
-                                     input_var=input_var)
-    # Apply 20% dropout to the input data:
-    l0d = lasagne.layers.DropoutLayer(l0, p=0.2)
-    l1 = lasagne.layers.DenseLayer(
-            l0d, num_units=28*28,
-            nonlinearity=leaky_rectify,
-            W=lasagne.init.GlorotUniform())
-    l1d = lasagne.layers.DropoutLayer(l1, p=0.5)
-    l2 = lasagne.layers.DenseLayer(
-            l1d, num_units=28*28,
-            nonlinearity=leaky_rectify)
-    l2d = lasagne.layers.DropoutLayer(l2, p=0.5)
-    l3 = lasagne.layers.SliceLayer(l2d, indices=slice(0,10),axis = 1)
-    l4 = lasagne.layers.NonlinearityLayer(l3, nonlinearity = lasagne.nonlinearities.softmax)
-    network = l4
-
-    network_layers.append(l0)
-    network_layers.append(l1)
-    network_layers.append(l2)
-    network_layers.append(l3)
-    network_layers.append(l4)
-
-    out_tensor = lasagne.layers.get_output(network)
-    fwd_params = lasagne.layers.get_all_params(network)
-
-    # y = T.matrix("y")
-    y = out_tensor
-    p1 = T.vector("p1")
-    p2 = T.matrix("p2")
+def make_inv(y, p1, p2, nlayers, gammas, betas, weights, inv_stds, means):
     inv_network_layers = []
     mlow =  T.max(1.0/y, axis=1)
     e = np.array(np.exp(1.0),dtype=T.config.floatX)
@@ -171,33 +144,72 @@ def build_inv_mlp(input_var=None, param_var=None):
     unsoftmax = T.log(y*m.dimshuffle(0, 'x'))
     lastl = T.concatenate([unsoftmax,p2],axis=1)
 
-    inv_l0 = lasagne.layers.InputLayer(shape=(None, 28*28),
+    inv_network = lasagne.layers.InputLayer(shape=(None, 28*28),
                                      input_var=lastl)
+    j = 1
+    for i in range(nlayers):
+        inv_network = lasagne.layers.NonlinearityLayer(inv_network, nonlinearity = inv_nonlinearity)
+        inv_network_layers.append(inv_network)
+        inv_network = InvBatchNormLayer(inv_network, gamma = gammas[-j], beta=betas[-j], inv_std=inv_stds[-j], mean=means[-j])
+        inv_network_layers.append(inv_network)
+        inv_network = lasagne.layers.DenseLayer(inv_network, 28*28, W = matrix_inverse(weights[-j]), b=None, nonlinearity=None)
+        inv_network_layers.append(inv_network)
+        j = j + 1
 
-    inv_l1 = lasagne.layers.NonlinearityLayer(inv_l0, nonlinearity = inv_leaky_rectify)
-    inv_l2 = lasagne.layers.BiasLayer(inv_l1, b = -fwd_params[-1])
-    inv_l3 = lasagne.layers.DenseLayer(inv_l2, 28*28, W = matrix_inverse(fwd_params[-2]), b=None, nonlinearity=None)
-    inv_l4 = lasagne.layers.NonlinearityLayer(inv_l3, nonlinearity = inv_leaky_rectify)
-    inv_l5 = lasagne.layers.BiasLayer(inv_l4, b = -fwd_params[-3])
-    inv_l6 = lasagne.layers.DenseLayer(inv_l5, 28*28, W = matrix_inverse(fwd_params[-4]), b=None, nonlinearity=None)
-    inv_network = inv_l6
+    return inv_network, inv_network_layers, p1, p2
 
-    inv_network_layers.append(inv_l0)
-    inv_network_layers.append(inv_l1)
-    inv_network_layers.append(inv_l2)
-    inv_network_layers.append(inv_l3)
-    inv_network_layers.append(inv_l4)
-    inv_network_layers.append(inv_l5)
-    inv_network_layers.append(inv_l6)
-    # Inverse Nonlinearity Layer
-    # Inverse Bias Layer
-    # Inverse Weight Mul
-    # Inverse Nonlinearity Layer
-    # Inverse Bias Layer
-    # Inverse Weight Mul
-    test_softmax = lasagne.nonlinearities.softmax(unsoftmax)
+def build_inv_mlp(input_var=None, param_var=None):
+    ## OK so noninvertibility, i.e. using an s_rectify is incorrect for the obvious reasons
+    ## What I want is a function which is invertible and defined on the unit interval.
+    ## Why is it difficult to keep the transformations within specifeid bounds.
+    ## It would
+    network_layers = []
+    forward_nonlinearity = leaky_rectify
+    inv_nonlinearity = inv_leaky_rectify
+    network = lasagne.layers.InputLayer(shape=(None, 1, 28, 28),
+                                     input_var=input_var)
+    # l0n = lasagne.layers.NonlinearityLayer(l0, nonlinearity=expand)
+    # Apply 20% dropout to the input data:
 
-    #
+    gammas = []
+    betas = []
+    weights= []
+    means = []
+    inv_stds = []
+
+    nlayers = 2
+    for i in range(nlayers):
+        network = lasagne.layers.DropoutLayer(network, p=0.2)
+        network = lasagne.layers.DenseLayer(
+                network, num_units=28*28,
+                nonlinearity=None,
+                W=lasagne.init.GlorotUniform(),
+                b=None)
+        network_layers.append(network)
+        weights.append(network.W)
+        network = lasagne.layers.BatchNormLayer(network)
+        network_layers.append(network)
+        betas.append(network.beta)
+        gammas.append(network.gamma)
+        inv_stds.append(network.inv_std)
+        means.append(network.mean)
+        network = lasagne.layers.NonlinearityLayer(network, nonlinearity=forward_nonlinearity)
+        network_layers.append(network)
+
+    network = lasagne.layers.DropoutLayer(network, p=0.2)
+    network = lasagne.layers.SliceLayer(network, indices=slice(0,10),axis = 1)
+    network = lasagne.layers.NonlinearityLayer(network, nonlinearity = lasagne.nonlinearities.softmax)
+    out_tensor = lasagne.layers.get_output(network,batch_norm_use_averages=False, batch_norm_update_averages=True)
+    fwd_params = lasagne.layers.get_all_params(network, trainable=True)
+
+    # y = T.matrix("y")
+    y = out_tensor
+    p1 = T.vector("p1")
+    p2 = T.matrix("p2")
+    inv_network, inv_network_layers = make_inv(y, p1, p2, nlayers, gammas, betas, weights, inv_stds, means)
+
+
+
     return network, inv_network, network_layers, inv_network_layers, y, p1, p2, [lasagne.layers.get_output(i,deterministic=True) for i in network_layers], [lasagne.layers.get_output(i) for i in inv_network_layers]
 
 def build_mlp2(input_var=None):
@@ -466,6 +478,9 @@ def bound_loss(x, tnp = np) :
 # more functions to better separate the code, but it wouldn't make it any
 # easier to read.
 
+def inv_batch_norm(y, mean, inv_sigma, beta, gamma):
+    return (y - beta)/(gamma * inv_sigma) + mean
+
 def main(model='mlp', num_epochs=500):
     # Load the dataset
     print("Loading data...")
@@ -511,21 +526,27 @@ def main(model='mlp', num_epochs=500):
 
     # Create a loss expression for training, i.e., a scalar objective we want
     # to minimize (for our multi-class problem, it is the cross-entropy loss):
-    prediction = lasagne.layers.get_output(network)
+    prediction = lasagne.layers.get_output(network, batch_norm_use_averages=False, batch_norm_update_averages=True)
     loss = lasagne.objectives.categorical_crossentropy(prediction, target_var)
     loss = loss.mean()
     # We could add some weight decay as well here, see lasagne.regularization.
 
+
     ## Inverse Loss
     inv_op = lasagne.layers.get_output(inv_network)
     # # Inversion should be within the training set bounds
-    bl1 = bound_loss(inv_op, tnp = T).mean()/10000
+    bl1 = bound_loss(inv_op, tnp = T).mean()/100
 
     # # Parameter should be within some reasonable bounds.
-    p_op = lasagne.layers.get_output(network_layers[2])
+    # p_op = lasagne.layers.get_output(network_layers[2])
     # bl2 = bound_loss(p_op, tnp = T).mean()/10000
+    l2_penalty_1 = regularize_layer_params(network_layers[1], l2)
+    l2_penalty_2 = regularize_layer_params(network_layers[2], l2)
 
-    total_loss = bl1 + loss
+    total_loss = bl1 + loss# + l2_penalty_1 + l2_penalty_2
+
+    losses = [loss, bl1, total_loss] #, l2_penalty_1, l2_penalty_2, total_loss]
+    print(losses)
     # total_loss = loss
 
 
@@ -535,10 +556,12 @@ def main(model='mlp', num_epochs=500):
     params = lasagne.layers.get_all_params(network, trainable=True)
     # updates = lasagne.updates.nesterov_momentum(
     #         loss, params, learning_rate=0.01, momentum=0.9)
-    updates = lasagne.updates.momentum(
-        total_loss, params, learning_rate=0.001
+    updates = lasagne.updates.adam(
+        total_loss, params, learning_rate=1e-3)
+    # updates = lasagne.updates.momentum(
+    #     total_loss, params, learning_rate=0.1)
+    # updates = lasagne.updates.adagrad(total_loss, params)
 
-        , momentum=0.9)
 
     # Create a loss expression for validation/testing. The crucial difference
     # here is that we do a deterministic forward pass through the network,
@@ -553,16 +576,13 @@ def main(model='mlp', num_epochs=500):
 
     # Compile a function performing a training step on a mini-batch (by giving
     # the updates dictionary) and returning the corresponding training loss:
-    train_fn = theano.function([input_var, target_var, p1, p2], [loss, bl1, total_loss], updates=updates, mode=curr_mode)
+    train_fn = theano.function([input_var, target_var, p1, p2], losses, updates=updates, mode=curr_mode)
 
     # Compile a second function computing the validation loss and accuracy:
     val_fn = theano.function([input_var, target_var], [test_loss, test_acc], mode=curr_mode)
 
     # For calling the damn thing and getting some output
     call_fn = theano.function([input_var], outputs, mode=curr_mode)
-
-    global inv_f
-    inv_f = theano.function([input_var,p1,p2], inv_outputs, mode=curr_mode)
 
     print("Loading Params")
     # with np.load('model.npz') as f:
@@ -579,12 +599,15 @@ def main(model='mlp', num_epochs=500):
         train_batches = 0
         start_time = time.time()
         j = 0
+        atime = time.time()
         for batch in iterate_minibatches(X_train, y_train, 500, shuffle=True):
             inputs, targets = batch
             currbatchsize = inputs.shape[0]
             p1dat = np.array(np.random.rand(currbatchsize), dtype=T.config.floatX)
             p2dat = np.array(np.random.rand(currbatchsize, 28*28-10), dtype=T.config.floatX)
             output = train_fn(inputs, targets, p1dat, p2dat)
+            param_values = lasagne.layers.get_all_param_values(network)
+            # np.savez_compressed("/home/zenna/data/sandbox/%sepoch%s_%s" % (atime, epoch, j), *param_values)
             train_err += output[0]
             print(output)
             train_batches += 1
@@ -660,7 +683,8 @@ if __name__ == '__main__':
 
 def test():
     X_train, y_train, X_val, y_val, X_test, y_test = load_dataset()
-    out = call_fn(X_train[3339].reshape(1,1,28,28))
+    inp_img = X_train[3339].reshape(1,1,28,28)
+    out = call_fn(inp_img)
     def softmax(x): return np.array(np.exp(x)/np.sum(np.exp(x)), dtype=T.config.floatX)
     ydat = softmax([[4.0,0.2,.3,0.2,0.2,0.2,.3,0.2,0.2,.1]])
     ydat = out[-1]
@@ -669,6 +693,8 @@ def test():
     iout = inv_f(X_train[3339].reshape(1,1,28,28),p1dat,p2dat)
     fuzz = iout[-1].reshape(1,1,28,28)
     outout = call_fn(fuzz)
+    reconstruction = outout[-1]
+    inv_is_is_working = np.sum(reconstruction - ydat) # should be zero!
 
     # mlow = T.max(1.0/y, axis=1)
     # mhigh = T.min(np.exp(1)/y, axis=1)

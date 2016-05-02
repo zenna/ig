@@ -52,12 +52,12 @@ def dist(a, b):
     return T.sum(T.maximum(eps, (a - b)**2))
 
 # Push(Stack, Item) -> Stack
-def push(input_stack, input_item, stack_size, n_blocks = 7, block_size = 2):
+def push(input_stack, input_item, stack_size, n_blocks = 2, block_size = 2):
   push_net = {}
   push_net['combine'] = prev_layer = ConcatLayer([input_stack, input_item])
   layer_width = stack_size
-  print("pop layer_width", layer_width)
-  wx = batch_norm(DenseLayer(prev_layer, layer_width, nonlinearity = rectify, W=lasagne.init.HeNormal(gain='relu')))
+  print("push layer_width", layer_width)
+  wx = DenseLayer(prev_layer, layer_width, nonlinearity = rectify, W=lasagne.init.HeNormal(gain='relu'))
   for j in range(n_blocks):
     for i in range(block_size):
       push_net['res2d%s_%s' % (j,i)] = prev_layer = batch_norm(DenseLayer(prev_layer, layer_width,
@@ -69,12 +69,12 @@ def push(input_stack, input_item, stack_size, n_blocks = 7, block_size = 2):
 
 
 # Push(Stack, Item) -> Stack
-def pop(input_stack, stack_size, item_size, n_blocks = 7, block_size = 2):
+def pop(input_stack, stack_size, item_size, n_blocks = 2, block_size = 2):
   pop_net = {}
   prev_layer = x = input_stack
   layer_width = stack_size+item_size
-  print("layer_width", layer_width)
-  wx = batch_norm(DenseLayer(x, layer_width, nonlinearity = rectify, W=lasagne.init.HeNormal(gain='relu')))
+  print("pop layer_width", layer_width)
+  wx = DenseLayer(x, layer_width, nonlinearity = rectify, W=lasagne.init.HeNormal(gain='relu'))
 
   for j in range(n_blocks):
     for i in range(block_size):
@@ -85,7 +85,7 @@ def pop(input_stack, stack_size, item_size, n_blocks = 7, block_size = 2):
   # pop_net['final'] = prev_layer = wx = lasagne.layers.NonlinearityLayer(prev_layer, nonlinearity=rectify)
   return pop_net, wx
 
-def main(X_train, stack_size = 100, nbatch = 256, item_size = 28*28, num_epochs = 100):
+def main(X_train, stack_size = 1, nbatch = 256, item_size = 28*28, num_epochs = 1000):
     # empty_stack = shared(np.random.rand(stack_size))
     global params, push_net, push_net_last_layer, push_func, pop_net, pop_net_last_layer
     input_stack = InputLayer((nbatch, stack_size))
@@ -116,10 +116,10 @@ def main(X_train, stack_size = 100, nbatch = 256, item_size = 28*28, num_epochs 
     b_loss1 = bound_loss(push_net_op, tnp=T).mean()
     b_loss2 = bound_loss(pop_op_stack, tnp=T).mean()
 
-    loss = ax2_loss2 + ax2_loss1 + b_loss1 + b_loss2
+    loss = ax2_loss2 + ax2_loss1 # + b_loss1 + b_loss2
     params =  lasagne.layers.get_all_params(pop_net_last_layer,  trainable=True)
-    updates = lasagne.updates.adam(loss, params, learning_rate = 0.001)
-    # updates = lasagne.updates.momentum(loss, params, learning_rate = 0.1)
+    updates = lasagne.updates.adam(loss, params, learning_rate = 0.00005)
+    # updates = lasagne.updates.momentum(loss, params, learning_rate = 0.0001)
     # updates = lasagne.updates.rmsprop(loss, params, learning_rate = 0.001)
     f_train = function([input_stack.input_var, input_item.input_var], [loss, ax2_loss1, ax2_loss2, b_loss1, b_loss2], updates = updates)
 
@@ -130,7 +130,7 @@ def main(X_train, stack_size = 100, nbatch = 256, item_size = 28*28, num_epochs 
         train_batches = 0
         start_time = time.time()
         for batch in iterate_minibatches(X_train, nbatch, shuffle=True):
-            input_item_data = batch.reshape(nbatch, item_size)
+            input_item_data = batch#.reshape(nbatch, item_size)
             input_stack_data = np.array(np.random.rand(nbatch, stack_size), dtype=config.floatX)
             losses = f_train(input_stack_data, input_item_data)
             print(losses)
@@ -169,4 +169,4 @@ def testing():
     shoud_be_old_stack, should_be_old_item = pop_func(new_stack_data)
 
 X_train, y_train, X_val, y_val, X_test, y_test = load_dataset()
-main(X_train, stack_size = 100, nbatch = 256, item_size = 28*28)
+main(X_train.reshape(50000,28*28), stack_size = 1000, nbatch = 256, item_size = 28*28)
