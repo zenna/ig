@@ -91,11 +91,12 @@ def load_dataset():
 
 def make_inv(y, p1, p2, nlayers, gammas, betas, weights, inv_stds, means):
     inv_network_layers = []
-    mlow =  T.max(1.0/y, axis=1)
-    e = np.array(np.exp(1.0),dtype=T.config.floatX)
-    mhigh = T.min(e/y, axis=1)
-    m = p1*(mhigh-mlow) + mlow
-    unsoftmax = T.log(y*m.dimshuffle(0, 'x'))
+    # mlow =  T.max(1.0/y, axis=1)
+    # e = np.array(np.exp(1.0),dtype=T.config.floatX)
+    # mhigh = T.min(e/y, axis=1)
+    # m = p1*(mhigh-mlow) + mlow
+    # unsoftmax = T.log(y*m.dimshuffle(0, 'x'))
+    unsoftmax = T.log(y*p1.dimshuffle(0, 'x'))
     lastl = T.concatenate([unsoftmax,p2],axis=1)
 
     inv_network = lasagne.layers.InputLayer(shape=(None, 28*28),
@@ -305,14 +306,14 @@ def main(model='mlp', num_epochs=500):
     all_params = lasagne.layers.get_all_params(network)
     print("params", params)
     print("all params", all_params)
-    data = np.load("/home/zenna/data/sandbox/1462201659.61epoch13.npz")
+    data = np.load("/home/zenna/data/sandbox/1462218357.93epoch5.npz")
     param_values = [data['arr_%s' % i]  for i in range(10)]
     lasagne.layers.set_all_param_values(network, param_values)
     # updates = lasagne.updates.nesterov_momentum(
     #         loss, params, learning_rate=0.01, momentum=0.9)
     global updates
     updates = lasagne.updates.adam(
-        total_loss, params, learning_rate=5e-4)
+        total_loss, params, learning_rate=1e-3)
     # updates = lasagne.updates.momentum(
     #     total_loss, params, learning_rate=1e-5)
     # updates = lasagne.updates.adagrad(total_loss, params)
@@ -335,7 +336,7 @@ def main(model='mlp', num_epochs=500):
     # the updates dictionary) and returning the corresponding training loss:
     global train_fn
     train_fn = theano.function([input_var, target_var, p1, p2], losses, updates=updates, mode=curr_mode, on_unused_input='warn')
-    load_update_state(updates, "/home/zenna/data/sandbox/1462201659.61_updates12_100.npz", update_indices)
+    load_update_state(updates, "/home/zenna/data/sandbox/1462218357.93_updates4_100.npz", update_indices)
 
     # Compile a second function computing the validation loss and accuracy:
     val_fn = theano.function([input_var, target_var], [test_loss, test_acc], mode=curr_mode)
@@ -441,6 +442,8 @@ if __name__ == '__main__':
             kwargs['num_epochs'] = int(sys.argv[2])
         main(**kwargs)
 
+## The pre softmax values in the forward pass range from like -10 to 1
+# However in the inverse pass they're about 0 to 10.  This is because the normalisation constant is very differennt
 
 def test():
     X_train, y_train, X_val, y_val, X_test, y_test = load_dataset()
@@ -455,7 +458,8 @@ def test():
         fuzz = iout[-1].reshape(1,1,28,28)
         outout = call_fn(fuzz)
         return out, outout, iout, fuzz
-    out, outout, iout, fuzz = ok(0)
+    out, outout, iout, fuzz = ok(6)
+    np.min(fuzz), np.max(fuzz)
     reconstruction = outout[-1]
     inv_is_is_working = np.sum(np.abs((reconstruction - ydat))) # should be zero!
 
