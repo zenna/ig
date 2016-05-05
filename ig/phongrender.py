@@ -208,10 +208,10 @@ def gen_img(voxels, rotation_matrix, width, height, nsteps, res, tnp = T):
 
     # For each voxel grid, compute grid of dot product of light vector and voxel
     vox_grid = gen_voxel_grid(res)
-    vox_grads = compute_gradient(vox_grid.reshape(-1,3), voxels, res, 1/nsteps, tnp = tnp)
+    vox_grads = compute_gradient(vox_grid.reshape(-1,3), voxels, res, 1.0/nsteps, tnp = tnp)
     light_dir = floatX([[[0,1,1]]])
     gdotl = T.sum((light_dir * vox_grads), axis=2)
-    gdot = T.maximum(0, gdotl)
+    gdotl = T.maximum(0, gdotl)
     gdotl_cube = gdotl.reshape((nvoxgrids, res, res, res))
     rgb = floatX([[[0.9,0.2,0.3]]])  # We'd have one rgb value per voxel, andtherefore it would Have
 
@@ -220,7 +220,7 @@ def gen_img(voxels, rotation_matrix, width, height, nsteps, res, tnp = T):
         pos = orig + rd*step_sz*i
         indices = get_indices(voxels, pos, res, tnp = T)
         attenuation = voxels[:, indices[:,0],indices[:,1],indices[:,2]]
-        attenuation = attenuation * flat_step_sz # Scale by step size
+        # attenuation = attenuation #* flat_step_sz # Scale by step size
         grad_samples = gdotl_cube[:, indices[:,0],indices[:,1],indices[:,2]]
         # rgb value at each position for each voxel
         rgb_scaled = rgb * grad_samples[:,:,np.newaxis] + 0.1 * rgb
@@ -265,7 +265,7 @@ print("Compiling Render Function")
 render = function([voxels, rotation_matrices], out, mode=curr_mode)
 
 ## Test
-voxel_data = [load_voxels_binary(i, 128, 128, 128) for i in get_rnd_voxels(10)]
+voxel_data = [load_voxels_binary(i, 128, 128, 128) for i in get_rnd_voxels(2)]
 views = rand_rotation_matrices(3)
 
 imgs = render(floatX(voxel_data), views)
