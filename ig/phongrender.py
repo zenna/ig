@@ -224,10 +224,9 @@ def gen_img(voxels, rotation_matrix, width, height, nsteps, res, tnp = T):
         grad_samples = gdotl_cube[:, indices[:,0],indices[:,1],indices[:,2]]
         # rgb value at each position for each voxel
         rgb_scaled = rgb * grad_samples[:,:,np.newaxis] + 0.1 * rgb
+        rgba = T.concatenate([rgb_scaled, attenuation[:,:,np.newaxis]],axis=2)
         one_minus_a = (1 - dst[:,:,3])[:,:,np.newaxis]
-        ok = one_minus_a * rgb_scaled
-        rgba = T.concatenate([ok, attenuation[:,:,np.newaxis]],axis=2)
-        dst = dst + rgba
+        dst = dst + one_minus_a * rgba
 
     pixels = T.reshape(dst, (nvoxgrids, nmatrices, width, height, 4))
     mask = t14>t04
@@ -346,5 +345,5 @@ imgs = render(floatX(voxel_data), views)
 #     train(cost_f_dict, val_f_dict, render, output_layer, options, test_files = test_files, train_files = train_files,
 #           to_print = to_print, to_save = to_save, validate = True)
 #
-if __name__ == "__main__":
-   main(sys.argv[1:])
+#if __name__ == "__main__":
+#   main(sys.argv[1:])
