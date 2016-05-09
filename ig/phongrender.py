@@ -34,6 +34,7 @@ from lasagne.nonlinearities import rectify
 
 from lasagne.layers import batch_norm
 # def batch_norm(x): return x
+import numpy
 
 from theano.compile.nanguardmode import NanGuardMode
 curr_mode = None
@@ -155,7 +156,48 @@ def compute_gradient(pos, voxels, res, n = 1, tnp = T):
     gradients = tnp.stack([x_diff, y_diff, z_diff], axis=2)
     return normalise(gradients, axis=2, tnp = tnp)
 
-def gen_img(voxels, rotation_matrix, width, height, nsteps, res, tnp = T):
+def cartesian_product(arrays):
+    broadcastable = numpy.ix_(*arrays)
+    broadcasted = numpy.broadcast_arrays(*broadcastable)
+    rows, cols = reduce(numpy.multiply, broadcasted[0].shape), len(broadcasted)
+    out = numpy.empty(rows * cols, dtype=broadcasted[0].dtype)
+    start, end = 0, rows
+    for a in broadcasted:
+        out[start:end] = a.reshape(-1)
+        start, end = end, end + rows
+    return out.reshape(cols, rows).T
+
+def cube_filter(voxels, res, n = 1):
+    """Take nvoxels,res,res,res voxels and return something of the same size"""
+    indices_range = np.arange(res)
+    indices = cartesian_product([indices_range, indices_range, indices_range])
+    x_zero = indices[:,0]
+    y_zero = indices[:,1]
+    z_zero = indices[:,2]
+    x_neg = np.clip(indices[:,0] - n, 0, res-1)
+    x_add = np.clip(indices[:,0] + n, 0, res-1)
+    y_neg = np.clip(indices[:,1] - n, 0, res-1)
+    y_add = np.clip(indices[:,1] + n, 0, res-1)
+    z_neg = np.clip(indices[:,2] - n, 0, res-1)
+    z_add = np.clip(indices[:,2] + n, 0, res-1)
+    v_x_add = voxels[:, x_add, y_zero, z_zero]
+    v_x_neg = voxels[:, x_neg, y_zero, z_zero]
+    v_y_add = voxels[:, x_zero, y_add, z_zero]
+    v_y_neg = voxels[:, x_zero, y_neg, z_zero]
+    v_z_add = voxels[:, x_zero, y_zero, z_add]
+    v_z_neg = voxels[:, x_zero, y_zero, z_neg]
+
+    voxels_flat = voxels.reshape((-1, res**3))
+    voxels_mean = (v_x_add + v_x_neg + v_y_add + v_y_neg + v_z_add + v_z_neg + voxels_flat)/7.0
+    return voxels_mean.reshape(voxels.shape)
+
+    ## if i have a lsit of x values and y values and z values then
+    ## When I have list of all the voxels, x,y,z
+    ## Ill make 6 more, each perturbed by one of the axes.
+    ## Then I'll take the average bitches.
+
+
+def gen_img(voxels, rotation_matrix, width, height, nsteps, res, rgb, tnp = T):
     """Renders n voxel grids in m different views
     voxels : (n, res, res, res)
     rotation_matrix : (m, 4)
@@ -211,9 +253,14 @@ def gen_img(voxels, rotation_matrix, width, height, nsteps, res, tnp = T):
     vox_grads = compute_gradient(vox_grid.reshape(-1,3), voxels, res, 1.0/nsteps, tnp = tnp)
     light_dir = floatX([[[0,1,1]]])
     gdotl = T.sum((light_dir * vox_grads), axis=2)
-    gdotl = T.maximum(0, gdotl)
     gdotl_cube = gdotl.reshape((nvoxgrids, res, res, res))
-    rgb = floatX([[[0.9,0.2,0.3]]])  # We'd have one rgb value per voxel, andtherefore it would Have
+    # Filter the gradients
+    gdotl_cube = cube_filter(gdotl_cube, res, 1)
+    gdotl_cube = cube_filter(gdotl_cube, res, 2)
+    gdotl_cube = cube_filter(gdotl_cube, res, 3)
+    gdotl_cube = cube_filter(gdotl_cube, res, 4)
+    gdotl_cube = cube_filter(gdotl_cube, res, 5)
+    gdotl_cube = T.maximum(0, gdotl_cube)
 
     for i in range(nsteps):
         # print "step", i
@@ -223,14 +270,14 @@ def gen_img(voxels, rotation_matrix, width, height, nsteps, res, tnp = T):
         # attenuation = attenuation #* flat_step_sz # Scale by step size
         grad_samples = gdotl_cube[:, indices[:,0],indices[:,1],indices[:,2]]
         # rgb value at each position for each voxel
-        rgb_scaled = rgb * grad_samples[:,:,np.newaxis] + 0.1 * rgb
+        rgb_scaled = 0.1 * rgb +  rgb * grad_samples[:,:,np.newaxis] 
         rgba = T.concatenate([rgb_scaled, attenuation[:,:,np.newaxis]],axis=2)
         one_minus_a = (1 - dst[:,:,3])[:,:,np.newaxis]
         dst = dst + one_minus_a * rgba
 
     pixels = T.reshape(dst, (nvoxgrids, nmatrices, width, height, 4))
     mask = t14>t04
-    return T.switch(mask[np.newaxis, :,:,:, np.newaxis], pixels, T.zeros_like(pixels)), gdotl_cube
+    return T.switch(mask[np.newaxis, :,:,:, np.newaxis], pixels, T.zeros_like(pixels))
 
 # Mean square error
 def mse(a, b):
@@ -259,14 +306,21 @@ res = 128
 nsteps = 100
 rotation_matrices = T.tensor3()
 voxels = T.tensor4()
-out = gen_img(voxels, rotation_matrices, width, height, nsteps, res)
+rgb = floatX([[[0.5,0.5,0.5]]])
+out = gen_img(voxels, rotation_matrices, width, height, nsteps, res, rgb)
 print("Compiling Render Function")
 render = function([voxels, rotation_matrices], out, mode=curr_mode)
 
 ## Test
-voxel_data = [load_voxels_binary(i, 128, 128, 128) for i in get_rnd_voxels(2)]
+voxel_data = floatX([load_voxels_binary(i, 128, 128, 128) for i in get_rnd_voxels(2)])
+voxel_data = cube_filter(voxel_data, res)
+voxel_data = cube_filter(voxel_data, res)
+voxel_data = cube_filter(voxel_data, res)
+
+
 views = rand_rotation_matrices(3)
 
+print("Rendering Voxels")
 imgs = render(floatX(voxel_data), views)
 
 
