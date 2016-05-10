@@ -30,9 +30,9 @@ from permute import PermuteLayer, Eye
 from nonlinearities import *
 from theano.compile.nanguardmode import NanGuardMode
 from lasagne.regularization import regularize_layer_params, l2
-theano.config.optimizer = 'None'
-curr_mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=False)
-# curr_mode = None
+# theano.config.optimizer = 'None'
+# curr_mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=False)
+curr_mode = None
 
 forward_nonlinearity = leaky_rectify
 inv_nonlinearity = inv_leaky_rectify
@@ -91,12 +91,12 @@ def load_dataset():
 
 def make_inv(y, p1, p2, nlayers, gammas, betas, weights, inv_stds, means):
     inv_network_layers = []
-    # mlow =  T.max(1.0/y, axis=1)
-    # e = np.array(np.exp(1.0),dtype=T.config.floatX)
-    # mhigh = T.min(e/y, axis=1)
-    # m = p1*(mhigh-mlow) + mlow
-    # unsoftmax = T.log(y*m.dimshuffle(0, 'x'))
-    unsoftmax = T.log(y*p1.dimshuffle(0, 'x'))
+    mlow =  T.max(1.0/y, axis=1)
+    e = np.array(np.exp(1.0),dtype=T.config.floatX)
+    mhigh = T.min(e/y, axis=1)
+    m = p1*(mhigh-mlow) + mlow
+    unsoftmax = T.log(y*m.dimshuffle(0, 'x'))
+    # unsoftmax = T.log(y*p1.dimshuffle(0, 'x'))
     lastl = T.concatenate([unsoftmax,p2],axis=1)
 
     inv_network = lasagne.layers.InputLayer(shape=(None, 28*28),
@@ -287,18 +287,21 @@ def main(model='mlp', num_epochs=500):
     ## Inverse Loss
     inv_op = lasagne.layers.get_output(inv_network)
     # # Inversion should be within the training set bounds
-    blx = bound_loss(inv_op, tnp = T)
+    blx = bound_loss(inv_op, tnp = T)/100
     bl1 = blx.mean()
     # bl2 = blx.max()
 
-    # # Parameter should be within some reasonable bounds.
-    # p_op = lasagne.layers.get_output(network_layers[2])
-    # bl2 = bound_loss(p_op, tnp = T).mean()/10000
-    l2_penalty_1 = regularize_layer_params(network_layers[1], l2)
-    l2_penalty_2 = regularize_layer_params(network_layers[2], l2)
+    p_op = lasagne.layers.get_output(network_layers[-3])
+    bl2 = bound_loss(p_op, tnp = T).mean()
 
-    total_loss = loss + bl1 # + bl2# + loss# + l2_penalty_1 + l2_penalty_2
-    losses = [loss, bl1, total_loss]
+    ## I want (i) 774 values to be within 0, 1 and
+    ## I want sum of weights to be between 0 and 1.
+    ## but that's challenging because if the weight sum is between 0 and 1, then this implies something on the
+    ## values which is not the same thing.
+    ## Let's just say I want all of these values to be between 0 and 1.
+
+    total_loss = loss + bl1 + bl2 # + bl2# + loss# + l2_penalty_1 + l2_penalty_2
+    losses = [loss, bl1, bl2, total_loss]
     # losses = [loss, bl1, bl2, total_loss] #, l2_penalty_1, l2_penalty_2, total_loss]
     print(losses)
     # total_loss = loss
@@ -306,9 +309,12 @@ def main(model='mlp', num_epochs=500):
     all_params = lasagne.layers.get_all_params(network)
     print("params", params)
     print("all params", all_params)
-    data = np.load("/home/zenna/data/sandbox/1462218357.93epoch5.npz")
-    param_values = [data['arr_%s' % i]  for i in range(10)]
-    lasagne.layers.set_all_param_values(network, param_values)
+    load_params = True
+    if load_params:
+        # data = np.load("/home/zenna/data/sandbox/1462218357.93epoch5.npz")
+        data = np.load("/home/zenna/data/sandbox/1462809191.22epoch211.npz")
+        param_values = [data['arr_%s' % i]  for i in range(10)]
+        lasagne.layers.set_all_param_values(network, param_values)
     # updates = lasagne.updates.nesterov_momentum(
     #         loss, params, learning_rate=0.01, momentum=0.9)
     global updates
@@ -336,7 +342,9 @@ def main(model='mlp', num_epochs=500):
     # the updates dictionary) and returning the corresponding training loss:
     global train_fn
     train_fn = theano.function([input_var, target_var, p1, p2], losses, updates=updates, mode=curr_mode, on_unused_input='warn')
-    load_update_state(updates, "/home/zenna/data/sandbox/1462218357.93_updates4_100.npz", update_indices)
+    if load_params:
+        # load_update_state(updates, "/home/zenna/data/sandbox/1462218357.93_updates4_100.npz", update_indices)
+        load_update_state(updates, "/home/zenna/data/sandbox/1462809191.22_updates210_100.npz", update_indices)
 
     # Compile a second function computing the validation loss and accuracy:
     val_fn = theano.function([input_var, target_var], [test_loss, test_acc], mode=curr_mode)

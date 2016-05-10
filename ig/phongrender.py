@@ -9,6 +9,7 @@ import time
 import os
 
 # Internal Imports
+from ig.primitives import *
 from ig.io import *
 from ig.util import *
 ## Extract features from an image
@@ -97,7 +98,18 @@ def make_ro(r, raster_space, width, height):
 def cast(x,type, tnp = T):
     return x.astype(type)
 
-def get_indices(voxels, pos, res, tnp = T):
+def index_voxels(voxels, indices):
+    """voxels : (nvoxgrids, res, res, res)
+    indices : (npos, 3)
+    returns (nvoxgrids, pos) - value at each of position in indices for each voxel grid
+    """
+    return voxels[:,indices[:,0],indices[:,1],indices[:,2]]
+
+def get_indices(pos, res, tnp = T):
+    """
+    pos: (npos, 3)
+    returns (npos, 3)
+    """
     voxel_indices = tnp.floor(pos*res)
     clamped = tnp.clip(voxel_indices,0,res-1)
     p_int =  cast(clamped, 'int32', tnp = tnp)
@@ -109,7 +121,7 @@ def sample_volume(voxels, pos, res, tnp = T):
     voxels : (nvoxgrids, res, res, res)
     pos : (npos, 3)
     returns : (nvoxgrids, npos)"""
-    indices = get_indices(voxels, pos, res, tnp = T)
+    indices = get_indices(pos, res, tnp = T)
     return voxels[:, indices[:,0],indices[:,1],indices[:,2]]
 
 def attenuate(gdotl, indices, attenuation, ):
@@ -197,18 +209,9 @@ def cube_filter(voxels, res, n = 1):
     ## Then I'll take the average bitches.
 
 
-def gen_img(voxels, rotation_matrix, width, height, nsteps, res, rgb, tnp = T):
-    """Renders n voxel grids in m different views
-    voxels : (n, res, res, res)
-    rotation_matrix : (m, 4)
-    returns (n, m, width, height))
-    """
-    nvoxgrids = voxels.shape[0]
-    raster_space = gen_fragcoords(width, height)
-    rd, ro = make_ro(rotation_matrix, raster_space, width, height)
+def get_ts(voxels, nvoxgrids, nmatrices, rd, ro, width, height):
     a = 0 - ro # c = 0
     b = 1 - ro # c = 1
-    nmatrices = rotation_matrix.shape[0]
     tn = T.reshape(a, (nmatrices, 1, 1, 3))/rd
     tf = T.reshape(b, (nmatrices, 1, 1, 3))/rd
     tn_true = T.minimum(tn,tf)
@@ -236,6 +239,20 @@ def gen_img(voxels, rotation_matrix, width, height, nsteps, res, rgb, tnp = T):
     # Shift a little bit to avoid numerial inaccuracies
     t04 = t04*1.001
     t14 = t14*0.999
+    return  t14, t04
+
+
+def gen_img(voxels, rotation_matrix, width, height, nsteps, res, rgb, tnp = T):
+    """Renders n voxel grids in m different views
+    voxels : (n, res, res, res)
+    rotation_matrix : (m, 4)
+    returns (n, m, width, height))
+    """
+    nmatrices = rotation_matrix.shape[0]
+    nvoxgrids = voxels.shape[0]
+    raster_space = gen_fragcoords(width, height)
+    rd, ro = make_ro(rotation_matrix, raster_space, width, height)
+    t14, t04 = get_ts(voxels, nvoxgrids, nmatrices, rd, ro, width, height)
 
     dst = T.zeros((nvoxgrids, nmatrices * width * height, 4))
     step_size = (t14 - t04)/nsteps
@@ -265,12 +282,12 @@ def gen_img(voxels, rotation_matrix, width, height, nsteps, res, rgb, tnp = T):
     for i in range(nsteps):
         # print "step", i
         pos = orig + rd*step_sz*i
-        indices = get_indices(voxels, pos, res, tnp = T)
+        indices = get_indices(pos, res, tnp = T)
         attenuation = voxels[:, indices[:,0],indices[:,1],indices[:,2]]
         # attenuation = attenuation #* flat_step_sz # Scale by step size
         grad_samples = gdotl_cube[:, indices[:,0],indices[:,1],indices[:,2]]
         # rgb value at each position for each voxel
-        rgb_scaled = 0.1 * rgb +  rgb * grad_samples[:,:,np.newaxis] 
+        rgb_scaled = 0.1 * rgb +  rgb * grad_samples[:,:,np.newaxis]
         rgba = T.concatenate([rgb_scaled, attenuation[:,:,np.newaxis]],axis=2)
         one_minus_a = (1 - dst[:,:,3])[:,:,np.newaxis]
         dst = dst + one_minus_a * rgba
@@ -278,6 +295,65 @@ def gen_img(voxels, rotation_matrix, width, height, nsteps, res, rgb, tnp = T):
     pixels = T.reshape(dst, (nvoxgrids, nmatrices, width, height, 4))
     mask = t14>t04
     return T.switch(mask[np.newaxis, :,:,:, np.newaxis], pixels, T.zeros_like(pixels))
+
+
+def gen_vox(input_imgs, nmatrices, nvoxgrids, rotation_matrix, params, width, height, nsteps, res, rgb, tnp = T):
+    """Renders n voxel grids in m different views
+    input_imgs : (nvox, nrays, nchannels)
+    rotation_matrix : (m, 4)
+    params : (nsteps, 1, 1, 1)
+    returns (n, m, width, height))
+    """
+    raster_space = gen_fragcoords(width, height)
+    rd, ro = make_ro(rotation_matrix, raster_space, width, height)
+    t14, t04 = get_ts(voxels, nvoxgrids, nmatrices, rd, ro, width, height)
+
+    dst = T.zeros((nvoxgrids, nmatrices * width * height, 4))
+    step_size = (t14 - t04)/nsteps
+    orig = T.reshape(ro, (nmatrices, 1, 1, 3)) + rd * T.reshape(t04,(nmatrices, width, height, 1))
+    xres = yres = zres = res
+
+    orig = T.reshape(orig, (nmatrices * width * height, 3))
+    rd = T.reshape(rd, (nmatrices * width * height, 3))
+    # Step size varies by ray because each ray intersects volum by different amount
+    step_sz = T.reshape(step_size, (nmatrices * width * height,1))
+    flat_step_sz = T.flatten(step_sz)
+
+    ## Output
+    vox_out_means = T.zeros((nvoxgrids, res, res, res))
+    # vox_out_var = T.zeros((nvoxgrids, res, res, res))
+    input_imgs_flat = input_imgs.reshape((nvoxgrids, nmatrices * width * height))
+    cn = input_imgs_flat
+    params_flat = params.reshape((nsteps, nvoxgrids, 1))
+
+    # step from n - 1 to 0
+    for i in range(nsteps-2): # n-1 to 0
+        print("Step", i)
+        pos = orig + rd*step_sz*i
+        indices = get_indices(pos, res, tnp = T)
+        # Minus rgb from the img
+        a = inv_plus_const(cn, rgb) # a = (1-a)c'
+        theta = get_params(params_flat, i)
+        b, c = inv_mul(a, theta)
+        cn = b
+        one_minus_c = 1 - c
+        vox_out_means = update_voxel_means(vox_out_means, indices, one_minus_c)
+
+    return vox_out_means/(nsteps-2)
+
+def inv_plus_const(cn, rgb):
+    """c' = ci (1-A)c'i-1. so the inverse is simply minusing rgb values
+    cn: (nrays, )"""
+    return cn - rgb
+
+def get_params(params, i):
+    """get parameters for ith iteration in inverse render"""
+    return params[i]
+
+def update_voxel_means(vox_out_means, indices, c):
+    empty = T.zeros(vox_out_means.shape)
+    filled = T.set_subtensor(empty[:, indices[:,0], indices[:,1], indices[:,2]], c)
+    return vox_out_means + filled
 
 # Mean square error
 def mse(a, b):
@@ -299,16 +375,29 @@ def nparams(output_layer):
 
 # def main(argv):
 ## Render with shading
-global render
-
+global render, inv_render
 width = height = 256
 res = 128
 nsteps = 100
 rotation_matrices = T.tensor3()
 voxels = T.tensor4()
-rgb = floatX([[[0.5,0.5,0.5]]])
-out = gen_img(voxels, rotation_matrices, width, height, nsteps, res, rgb)
+# rgb = floatX([[[0.5,0.5,0.5]]])
+rgb = floatX(0.5)
+
+## Invere Render Function
+print("Compiling Inverse Render Function")
+input_imgs =  T.TensorType(dtype=T.config.floatX, broadcastable=(False,)*4)('input_imgs')
+params = T.TensorType(dtype=T.config.floatX, broadcastable=(False,)*5)('params')
+nvoxgrids = input_imgs.shape[0]
+nmatrices = input_imgs.shape[1]
+# nvoxgrids = 4
+# nmatrices = 3
+vox_means = gen_vox(input_imgs, nmatrices, nvoxgrids, rotation_matrices, params, width, height, nsteps, res, rgb)
+inv_render = function([input_imgs, params, rotation_matrices], vox_means)
+
+## Forward Render function
 print("Compiling Render Function")
+out = gen_img(voxels, rotation_matrices, width, height, nsteps, res, rgb)
 render = function([voxels, rotation_matrices], out, mode=curr_mode)
 
 ## Test
