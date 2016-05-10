@@ -320,11 +320,16 @@ def gen_vox(input_imgs, nmatrices, nvoxgrids, rotation_matrix, params, width, he
     flat_step_sz = T.flatten(step_sz)
 
     ## Output
-    vox_out_means = T.zeros((nvoxgrids, res, res, res))
+    # vox_out_means = T.zeros((nvoxgrids, res, res, res))
     # vox_out_var = T.zeros((nvoxgrids, res, res, res))
     input_imgs_flat = input_imgs.reshape((nvoxgrids, nmatrices * width * height))
     cn = input_imgs_flat
     params_flat = params.reshape((nsteps, nvoxgrids, 1))
+
+    # Setup for variance
+    n = 1
+    mean = T.zeros((nvoxgrids, res, res, res))
+    M2 = T.zeros((nvoxgrids, res, res, res))
 
     # step from n - 1 to 0
     for i in range(nsteps-2): # n-1 to 0
@@ -337,9 +342,13 @@ def gen_vox(input_imgs, nmatrices, nvoxgrids, rotation_matrix, params, width, he
         b, c = inv_mul(a, theta)
         cn = b
         one_minus_c = 1 - c
-        vox_out_means = update_voxel_means(vox_out_means, indices, one_minus_c)
+        x = update_voxel_means(mean, indices, one_minus_c)
+        mean, M2 = online_variance(x, mean, M2, n)
+        n = n + 1
 
-    return vox_out_means/(nsteps-2)
+    var = M2 / (n - 1)
+    return mean, var
+    # return vox_out_means/(nsteps-2)
 
 def inv_plus_const(cn, rgb):
     """c' = ci (1-A)c'i-1. so the inverse is simply minusing rgb values
@@ -350,10 +359,17 @@ def get_params(params, i):
     """get parameters for ith iteration in inverse render"""
     return params[i]
 
-def update_voxel_means(vox_out_means, indices, c):
-    empty = T.zeros(vox_out_means.shape)
+def update_voxel_means(mean, indices, c):
+    empty = T.zeros(mean.shape)
     filled = T.set_subtensor(empty[:, indices[:,0], indices[:,1], indices[:,2]], c)
-    return vox_out_means + filled
+    return filled
+    # return vox_out_means + filled
+
+def online_variance(x, mean, M2, n):
+    delta = x - mean
+    mean = mean + delta / n
+    M2 = M2 + delta * (x - mean)
+    return mean, M2
 
 # Mean square error
 def mse(a, b):
@@ -378,7 +394,7 @@ def nparams(output_layer):
 global render, inv_render
 width = height = 256
 res = 128
-nsteps = 100
+nsteps = 5
 rotation_matrices = T.tensor3()
 voxels = T.tensor4()
 # rgb = floatX([[[0.5,0.5,0.5]]])
@@ -392,101 +408,41 @@ nvoxgrids = input_imgs.shape[0]
 nmatrices = input_imgs.shape[1]
 # nvoxgrids = 4
 # nmatrices = 3
-vox_means = gen_vox(input_imgs, nmatrices, nvoxgrids, rotation_matrices, params, width, height, nsteps, res, rgb)
-inv_render = function([input_imgs, params, rotation_matrices], vox_means)
-
-## Forward Render function
-print("Compiling Render Function")
-out = gen_img(voxels, rotation_matrices, width, height, nsteps, res, rgb)
-render = function([voxels, rotation_matrices], out, mode=curr_mode)
-
-## Test
-voxel_data = floatX([load_voxels_binary(i, 128, 128, 128) for i in get_rnd_voxels(2)])
-voxel_data = cube_filter(voxel_data, res)
-voxel_data = cube_filter(voxel_data, res)
-voxel_data = cube_filter(voxel_data, res)
-
-
+vox_mean, vox_var = gen_vox(input_imgs, nmatrices, nvoxgrids, rotation_matrices, params, width, height, nsteps, res, rgb)
+eps = 1e-9
+loss = (vox_var + eps).mean()
+inv_render = function([input_imgs, params, rotation_matrices], [vox_mean, vox_var, loss])
 views = rand_rotation_matrices(3)
 
-print("Rendering Voxels")
-imgs = render(floatX(voxel_data), views)
+nvoxgrids_data = 4
+nmatrices_data = 3
+input_imgs_data = np.random.rand(nvoxgrids_data,nmatrices_data,width,height)
+params_data = np.random.rand(nsteps, 4, 1, 1, 1)
+mean, var = inv_render(input_imgs_data, params_data, views)
 
 
 
+## Forward Render function
+# print("Compiling Render Function")
+# out = gen_img(voxels, rotation_matrices, width, height, nsteps, res, rgb)
+# render = function([voxels, rotation_matrices], out, mode=curr_mode)
+#
+# ## Test
+# voxel_data = floatX([load_voxels_binary(i, 128, 128, 128) for i in get_rnd_voxels(2)])
+# voxel_data = cube_filter(voxel_data, res)
+# voxel_data = cube_filter(voxel_data, res)
+# voxel_data = cube_filter(voxel_data, res)
+#
+#
+# views = rand_rotation_matrices(3)
+#
+# print("Rendering Voxels")
+# imgs = render(floatX(voxel_data), views)
 
-# def main(argv):
-#     ## Args
-#     global options
-#     global render
-#     global test_files, train_files
-#     global net, output_layer, cost_f, cost_f_dict, val_f, call_f, call_f_dict
-#     global views, voxels, outputs, net
-#
-#
-#     options = handle_args(argv)
-#     width = options['width'] = 64
-#     height = options['height'] = 64
-#     res = options['res'] = 64
-#     nsteps = options['nsteps'] = 100
-#     nvoxgrids = options['nvoxgrids'] = 8*8
-#     nviews = options['nviews'] = 1
-#     nepochs = options['nepochs'] = 10000
-#
-#     print(options)
-#
-#     rotation_matrices = T.tensor3()
-#     voxels = T.tensor4()
-#     out = gen_img(voxels, rotation_matrices, width, height, nsteps, res)
-#     print("Compiling Render Function")
-#     render = function([voxels, rotation_matrices], out, mode=curr_mode)
-#
-#     ## Training Function
-#     views = T.tensor4() # nbatches * width * height
-#     net, output_layer, outputs = second_order(rotation_matrices, views, voxels, width = width, height = height, nsteps = nsteps, res = res, nvoxgrids = nvoxgrids)
-#     voxels = lasagne.layers.get_output(output_layer, deterministic = False)
-#
-#     losses = get_loss(net, voxels, voxels, nvoxgrids, res, output_layer)
-#     loss = losses[0]
-#     updates = get_updates(loss, output_layer, options)
-#
-#     # outputs.update({'loss1': loss1})
-#     # outputs.update({'loss2': loss2})
-#     outputs.update({'loss': loss})
-#     outputs.update({'voxels': voxels})
-#
-#     selected_outputs = ['loss', 'voxels'] #+ net.keys()
-#     print("Compiling Training Function")
-#     cost_f = compile_conv_net(views, voxels, outputs, selected_outputs, updates)
-#     cost_f_dict = named_outputs(cost_f, ['loss', 'voxels'])
-#
-#     ## Validation Function
-#     val_voxels = lasagne.layers.get_output(output_layer, deterministic = True)
-#     val_losses = get_loss(net, val_voxels, voxels, nvoxgrids, res, output_layer)
-#     val_loss = val_losses[0]
-#     outputs.update({'val_loss' : val_loss})
-#     # outputs.update({'val_loss1' : val_loss1})
-#     # outputs.update({'val_loss2' : val_loss2})
-#     print("Compiling Validation Function")
-#     val_f = compile_conv_net(views, voxels, outputs, ['loss'], None)
-#     val_f_dict = named_outputs(cost_f, ['loss', 'voxels'])
-#
-#     to_print = ['loss']
-#     to_save = ['loss', 'voxels', 'val_loss', 'filenames', 'param_values',
-#                'width', 'height', 'res', 'nsteps', 'nvoxgrids', 'nviews',
-#                'nepochs', 'learning_rate', 'momentum']
-#
-#     ## Call function
-#     # print("Compiling Calling Function")
-#     # call_f = compile_conv_net(views, voxels, outputs, net.keys(), None, on_unused_input='warn')
-#     # call_f_dict = named_outputs(call_f, net.keys())
-#
-#     # Kinds of things I want to savea, (1) Output from function (2) Parameters (3) Constant values
-#     test_files = filter(lambda x:x.endswith(".raw") and "test" in x, get_filepaths(os.getenv('HOME') + '/data/ModelNet40'))
-#     train_files = filter(lambda x:x.endswith(".raw") and "train" in x, get_filepaths(os.getenv('HOME') + '/data/ModelNet40'))
-#
-#     train(cost_f_dict, val_f_dict, render, output_layer, options, test_files = test_files, train_files = train_files,
-#           to_print = to_print, to_save = to_save, validate = True)
-#
-#if __name__ == "__main__":
-#   main(sys.argv[1:])
+def normalise_rgba(rgba):
+    width = rgba.shape[0]
+    height = rgba.shape[1]
+    rgb = rgba[:,:,0:3]
+    norm_rgb = rgb/np.max(rgb)
+    alpha = rgba[:,:,3]
+    return np.concatenate([norm_rgb, alpha.reshape(width, height, 1)], axis=2)
