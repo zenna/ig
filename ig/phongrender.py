@@ -394,7 +394,7 @@ def nparams(output_layer):
 global render, inv_render
 width = height = 256
 res = 128
-nsteps = 5
+nsteps = 100
 rotation_matrices = T.tensor3()
 voxels = T.tensor4()
 # rgb = floatX([[[0.5,0.5,0.5]]])
@@ -411,13 +411,15 @@ nmatrices = input_imgs.shape[1]
 vox_mean, vox_var = gen_vox(input_imgs, nmatrices, nvoxgrids, rotation_matrices, params, width, height, nsteps, res, rgb)
 eps = 1e-9
 loss = (vox_var + eps).mean()
+print("Actually Compiling")
 inv_render = function([input_imgs, params, rotation_matrices], [vox_mean, vox_var, loss])
 views = rand_rotation_matrices(3)
 
 nvoxgrids_data = 4
 nmatrices_data = 3
 input_imgs_data = np.random.rand(nvoxgrids_data,nmatrices_data,width,height)
-params_data = np.random.rand(nsteps, 4, 1, 1, 1)
+params_data = floatX(np.random.rand(nsteps, 4, 1, 1, 1))
+print("Rendering")
 mean, var = inv_render(input_imgs_data, params_data, views)
 
 
