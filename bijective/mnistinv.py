@@ -287,12 +287,12 @@ def main(model='mlp', num_epochs=500):
     ## Inverse Loss
     inv_op = lasagne.layers.get_output(inv_network)
     # # Inversion should be within the training set bounds
-    blx = bound_loss(inv_op, tnp = T)/100
+    blx = bound_loss(inv_op, tnp = T)
     bl1 = blx.mean()
     # bl2 = blx.max()
 
     p_op = lasagne.layers.get_output(network_layers[-3])
-    bl2 = bound_loss(p_op, tnp = T).mean()
+    bl2 = bound_loss(p_op, tnp = T).mean() * 10
 
     ## I want (i) 774 values to be within 0, 1 and
     ## I want sum of weights to be between 0 and 1.
@@ -312,7 +312,9 @@ def main(model='mlp', num_epochs=500):
     load_params = True
     if load_params:
         # data = np.load("/home/zenna/data/sandbox/1462218357.93epoch5.npz")
-        data = np.load("/home/zenna/data/sandbox/1462809191.22epoch211.npz")
+        # data = np.load("/home/zenna/data/sandbox/1462809191.22epoch211.npz")
+        data = np.load("/home/zenna/data/sandbox/1462872665.36epoch51.npz")
+
         param_values = [data['arr_%s' % i]  for i in range(10)]
         lasagne.layers.set_all_param_values(network, param_values)
     # updates = lasagne.updates.nesterov_momentum(
@@ -344,7 +346,8 @@ def main(model='mlp', num_epochs=500):
     train_fn = theano.function([input_var, target_var, p1, p2], losses, updates=updates, mode=curr_mode, on_unused_input='warn')
     if load_params:
         # load_update_state(updates, "/home/zenna/data/sandbox/1462218357.93_updates4_100.npz", update_indices)
-        load_update_state(updates, "/home/zenna/data/sandbox/1462809191.22_updates210_100.npz", update_indices)
+        # load_update_state(updates, "/home/zenna/data/sandbox/1462809191.22_updates210_100.npz", update_indices)
+        load_update_state(updates, "/home/zenna/data/sandbox/1462872665.36_updates50_100.npz", update_indices)
 
     # Compile a second function computing the validation loss and accuracy:
     val_fn = theano.function([input_var, target_var], [test_loss, test_acc], mode=curr_mode)
@@ -368,6 +371,7 @@ def main(model='mlp', num_epochs=500):
         print(atime)
         param_values = lasagne.layers.get_all_param_values(network)
         np.savez_compressed("/home/zenna/data/sandbox/%sepoch%s" % (atime, epoch), *param_values)
+        save_update_state(updates, "/home/zenna/data/sandbox/update_%sepoch%s" % (atime, epoch), update_indices)
 
         batch_size = 500
 
@@ -383,7 +387,8 @@ def main(model='mlp', num_epochs=500):
             if j == 0:
                 print("maxmin", np.max(inputs), np.min(inputs))
             j = j + 1
-            save_update_state(updates, "/home/zenna/data/sandbox/%s_updates%s_%s.npz" % (atime, epoch, j), update_indices)
+            # if j % 10 == 0:
+            #     save_update_state(updates, "/home/zenna/data/sandbox/%s_updates%s_%s.npz" % (atime, epoch, j), update_indices)
 
         # And a full pass over the validation data:
         val_err = 0

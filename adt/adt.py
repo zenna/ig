@@ -8,29 +8,18 @@
 from __future__ import print_function
 
 import time
-from collections import OrderedDict
 
+from templates import *
 from ig.io import *
 from ig.util import *
 
 import theano
 import theano.tensor as T
 import lasagne
-from lasagne.layers import InputLayer
-from lasagne.layers import DenseLayer
-from lasagne.layers import NonlinearityLayer
-from lasagne.layers import ConcatLayer
-from lasagne.layers import DropoutLayer
-from lasagne.layers import Pool2DLayer as PoolLayer
-from lasagne.layers import Conv1DLayer
-from lasagne.layers import batch_norm
 # def batch_norm(x, **kwargs): return x
 from lasagne.utils import floatX
 
-from lasagne.init import HeNormal, Constant
-
 # from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
-from lasagne.nonlinearities import softmax, rectify, sigmoid
 from theano import shared
 from theano import function
 from theano import config
@@ -38,8 +27,7 @@ from theano import config
 import numpy as np
 from mnist import *
 
-# theano.config.optimizer = 'fast_compile'
-theano.config.optimizer = 'None'
+
 
 # Mean square error
 def mse(a, b):
@@ -82,74 +70,6 @@ def iterate_minibatches(inputs, batchsize, shuffle=False):
         else:
             excerpt = slice(start_idx, start_iiteratedx + batchsize)
         yield inputs[excerpt]
-
-def handle_batch_norm(params, suffix, bn_layer):
-  params.set("W_%s" % suffix, bn_layer.input_layer.input_layer.W)
-  params.set("beta_%s" % suffix, bn_layer.input_layer.beta)
-  params.set("gamma_%s" % suffix, bn_layer.input_layer.gamma)
-  params.set("inv_std_%s" % suffix, bn_layer.input_layer.inv_std)
-
-def res_net(*inputs, **kwargs):
-  """A residual network of n inputs and m outputs"""
-  inp_shapes = kwargs['inp_shapes']
-  out_shapes = kwargs['out_shapes']
-  params = kwargs['params']
-  layer_width = kwargs['layer_width']
-
-  input_width = np.sum([in_shape[1] for in_shape in inp_shapes])
-  output_width = np.sum([out_shape[1] for out_shape in out_shapes])
-  n_blocks = 5
-  block_size = 2
-  print("Building resnet with: %s residual blocks of size %s inner width: %s from: %s inputs to %s outputs" %
-        (n_blocks, block_size, layer_width, input_width, output_width))
-  input_layers = [InputLayer(inp_shapes[i], input_var = inputs[i]) for i in range(len(inputs))]
-
-  net = {}
-  net['concat'] = prev_layer = ConcatLayer(input_layers)
-  # Projet inner layer down/up to hidden layer width only if necessary
-  if layer_width != input_width:
-      print("Doing input projection, layer_width: %s input_width: %s" % (layer_width, input_width))
-      wx = batch_norm(DenseLayer(prev_layer, layer_width, nonlinearity = rectify, W=params['W_wx', HeNormal(gain='relu')]),
-                                 beta=params['beta_wx', Constant(0)], gamma=params['gamma_wx', Constant(1)],
-                                 mean=params['mean_wx', Constant(0)], inv_std=params['inv_std_wx', Constant(1)])
-      handle_batch_norm(params, 'wx', wx)
-  else:
-      print("Skipping input weight projection, layer_width: %s input_width: %s" % (layer_width, input_width))
-      wx = prev_layer
-  for j in range(n_blocks):
-    for i in range(block_size):
-      sfx = "%s_%s" % (j,i)
-      net['res2d%s_%s' % (j,i)] = prev_layer = batch_norm(DenseLayer(prev_layer, layer_width,
-            nonlinearity = rectify, W=params['W_%s' % sfx, HeNormal(gain='relu')]),
-            beta=params['beta_%s' % sfx, Constant(0)], gamma=params['gamma_%s' % sfx, Constant(1)],
-            mean=params['mean_%s' % sfx, Constant(0)], inv_std=params['inv_std_%s' % sfx, Constant(1)])
-      handle_batch_norm(params, sfx, prev_layer)
-    net['block%s' % j] = prev_layer = wx = lasagne.layers.ElemwiseSumLayer([prev_layer, wx])
-
-  if layer_width != output_width:
-      print("Doing output projection, layer_width: %s output_width: %s" % (layer_width, output_width))
-      net['output'] = batch_norm(DenseLayer(prev_layer, output_width, nonlinearity = rectify, W=params['W_out', HeNormal(gain='relu')]),
-                                 beta=params['beta_out', Constant(0)], gamma=params['gamma_out', Constant(0)],
-                                 mean=params['mean_out', Constant(1)], inv_std=params['inv_std_out', Constant(1)])
-      handle_batch_norm(params, 'out', net['output'])
-  else:
-      print("Skipping output projection, layer_width: %s output_width: %s" % (layer_width, output_width))
-      net['output'] = prev_layer
-
-  # Split up the final layer into necessary parts
-  output_product = lasagne.layers.get_output(net['output'])
-  outputs = []
-  lb = 0
-  for out_shape in out_shapes:
-      ub = lb + out_shape[1]
-      print("lbub", lb," ", ub)
-      out = output_product[:, lb:ub]
-      outputs.append(out)
-      lb = ub
-
-  params.add_tagged_params(get_layer_params(lasagne.layers.get_all_layers(net['output'])))
-  params.check(lasagne.layers.get_all_params(prev_layer))
-  return outputs, params
 
 class Type():
     def __init__(self, shape, dtype = T.config.floatX, name = ''):
@@ -217,6 +137,19 @@ class Axiom():
         losses = [dist(self.lhs[i], self.rhs[i]) for i in range(len(self.lhs))]
         return losses
 
+def bound_loss(x, tnp = T) :
+  eps = 1e-9
+  loss = tnp.maximum(tnp.maximum(eps,x-1), tnp.maximum(eps,-x)) + eps
+  return tnp.maximum(loss, eps) + eps
+
+class BoundAxiom():
+    "Constraints a type to be within specifiec bounds"
+    def __init__(self, type, name = 'bound_loss'):
+        self.input_var = type
+
+    def get_losses(self):
+        return [bound_loss(self.input_var).mean()]
+
 # class Constant():
 #     def __init__(self, value):
 #         self.value = shared(value)
@@ -272,12 +205,6 @@ class Params():
 
         return lasagne.utils.collect_shared_vars(result)
 
-def get_layer_params(layers):
-    params = OrderedDict()
-    for layer in layers:
-        params.update(layer.params)
-    return params
-
 def get_updates(loss, params, options):
     updates = {}
     print("Params",params)
@@ -304,7 +231,7 @@ def get_params(interfaces, options, **tags):
 
     return params
 
-def compile_fns(interfaces, forallvars, axioms):
+def compile_fns(interfaces, forallvars, axioms, options):
     print("Compiling training fn...")
     losses = get_losses(axioms)
     params = get_params(interfaces, options, trainable=True)
@@ -334,80 +261,7 @@ def train(train_fn, generators, num_epochs = 1000):
             train_batches += 1
         print("epoch: ", epoch, " Total loss per epoch: ", train_err)
 
-## A stack
-def stack_example(train_data, stack_shape = (100,), item_shape = (28*28,), batch_sizes = (256, 256)):
-    Stack = Type(stack_shape)
-    Item = Type(item_shape)
-    push = Interface([Stack, Item],[Stack], res_net, layer_width=100)
-    pop = Interface([Stack],[Stack, Item], res_net, layer_width=884)
-    stack1 = ForAllVar(Stack)
-    item1 = ForAllVar(Item)
-    global axiom1
-    generators = [infinite_samples(np.random.rand, batch_sizes[0], stack_shape),
-                  infinite_minibatches(train_data, batch_sizes[1], True)]
-    axiom1 = Axiom(pop(*push(stack1.input_var, item1.input_var)), (stack1.input_var, item1.input_var))
-    train_fn, call_fns = compile_fns([push, pop], [stack1, item1], [axiom1])
-    train(train_fn, generators)
 
-def scalar_field_example(field_shape = (100,), batch_size=256):
-    Field = Type(field_shape)
-    Point = Type((3,))
-    Scalar = Type((1,))
-
-    s = Interface([Field, Point], [Scalar], res_net, layer_width = 100)
-    union = Interface([Field, Field], [Field], res_net, layer_width = 100)
-    intersection = Interface([Field, Field], [Field], res_net, layer_width = 100)
-    interfaces = [s, union, intersection]
-
-    field1 = ForAllVar(Field)
-    field2 = ForAllVar(Field)
-    point1 = ForAllVar(Point)
-    generators = [infinite_samples(np.random.rand, batch_size, field_shape),
-                  infinite_samples(np.random.rand, batch_size, field_shape),
-                  infinite_samples(np.random.rand, batch_size, (3,))]
-    global forallvars
-    forallvars = [field1, field2, point1]
-    # Boolean structure on scalar field
-    # ForAll p in R3, (f1 union f2)(p) = f1(p) f2(p)
-    axiom1 = Axiom(s(*(union(field1, field2) + [point1])), [s(field1, point1)[0] * s(field2, point1)[0]])
-    axiom2 = Axiom(s(*(intersection(field1, field2) + [point1])), [s(field1, point1)[0] + s(field2, point1)[0]])
-    axioms = [axiom1, axiom2]
-    train_fn, call_fns = compile_fns(interfaces, forallvars, axioms)
-    train(train_fn, generators)
-
-def binary_tree(train_data, binary_tree_shape = (500,), item_shape = (28*28,),  batch_size = 256):
-    BinTree = Type(binary_tree_shape)
-    Item = Type(item_shape)
-    make = Interface([BinTree, Item, BinTree],[BinTree], res_net, layer_width=500)
-    left_tree = Interface([BinTree], [BinTree], res_net, layer_width=500)
-    right_tree = Interface([BinTree], [BinTree], res_net, layer_width=500)
-    get_item = Interface([BinTree], [Item], res_net, layer_width=500)
-    # is_empty = Interface([BinTree], [BoolType])
-
-    bintree1 = ForAllVar(BinTree)
-    bintree2 = ForAllVar(BinTree)
-    item1 = ForAllVar(Item)
-    # error = Constant(np.random.rand(item_shape))
-
-    # axiom1 = Axiom(left_tree(create), error)
-    make_stuff = make(bintree1.input_var, item1.input_var, bintree2.input_var)
-    axiom2 = Axiom(left_tree(*make_stuff), (bintree1.input_var,))
-    # axiom3 = Axiom(right_tree(create), error)
-    axiom4 = Axiom(right_tree(*make_stuff), (bintree2.input_var,))
-    # axiom5 = Axiom(item(create), error) # FIXME, how to handle True
-    axiom6 = Axiom(get_item(*make_stuff), (item1.input_var,))
-    # axiom7 = Axiom(is_empty(create), True)
-    # axiom8 = Axiom(is_empty(make(bintree1.input_var, item1, bintree2)), False)
-    interfaces = [make, left_tree, right_tree, get_item]
-    # axioms = [axiom1, axiom2, axiom3, axiom4, axiom5, axiom6, axiom6, axiom7. axiom8]
-    axioms = [axiom2, axiom4, axiom6]
-    forallvars = [bintree1, bintree2, item1]
-    generators = [infinite_samples(np.random.rand, batch_size, binary_tree_shape),
-                 infinite_samples(np.random.rand, batch_size, binary_tree_shape),
-                 infinite_minibatches(train_data, batch_size, True)]
-    train_fn, call_fns = compile_fns(interfaces, forallvars, axioms)
-    train(train_fn, generators)
-#
 # def associative_array(keyed_table_shape = (100,)):
 #     # Types
 #     KeyedTable = Type(keyed_table_shape)
@@ -448,27 +302,3 @@ def binary_tree(train_data, binary_tree_shape = (500,), item_shape = (28*28,),  
 #     Symbol = Type(symbol)
 #
 #     Q_s = Constant(0)
-
-
-
-def main(argv):
-    ## Args
-    global options
-    global test_files, train_files
-    global net, output_layer, cost_f, cost_f_dict, val_f, call_f, call_f_dict
-    global views, shape_params, outputs, net
-
-    options = handle_args(argv)
-    nepochs = options['nepochs'] = 10000
-    options['compile_fns'] = False
-
-    print(options)
-
-    X_train, y_train, X_val, y_val, X_test, y_test = load_dataset()
-    # stack_example(X_train.reshape(50000,28*28))
-    # binary_tree(X_train.reshape(50000,28*28))
-    scalar_field_example()
-
-
-if __name__ == "__main__":
-   main(sys.argv[1:])
