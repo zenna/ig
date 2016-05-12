@@ -1,10 +1,3 @@
-## The ways these problems differ
-## 1. Representation of the type, basically what kind of tensor.
-## 2. function space for each interface
-## 3. generator for particular, types
-## 5. May have dependent function spaces, e.g. parameter sharing.
-
-
 from __future__ import print_function
 
 import time
@@ -25,14 +18,11 @@ from theano import function
 from theano import config
 
 import numpy as np
-from mnist import *
-
-
 
 # Mean square error
-def mse(a, b):
+def mse(a, b, tnp = T):
     eps = 1e-9
-    return (T.maximum(eps, (a - b)**2)).mean()
+    return (tnp.maximum(eps, (a - b)**2)).mean()
 
 def infinite_samples(sampler, batchsize, shape):
     while True:
@@ -105,7 +95,7 @@ class Interface():
         params = Params()
         self.inp_shapes = [type.get_shape(add_batch=True) for type in lhs]
         self.out_shapes = [type.get_shape(add_batch=True) for type in rhs]
-        outputs, params = func_space(*self.inputs, params = params, inp_shapes = self.inp_shapes, out_shapes = self.out_shapes, **self.func_space_kwargs)
+        outputs, params = func_space(*self.inputs, deterministic = True, params = params, inp_shapes = self.inp_shapes, out_shapes = self.out_shapes, **self.func_space_kwargs)
         self.params = params
         self.outputs = outputs
 
@@ -113,8 +103,22 @@ class Interface():
         args = [arg.input_var if hasattr(arg, 'input_var') else arg for arg in raw_args]
         print("Calling", args)
         shapes = [type.get_shape(add_batch=True) for type in self.lhs]
-        outputs, params = self.func_space(*args, params = self.params, inp_shapes = self.inp_shapes, out_shapes = self.out_shapes, **self.func_space_kwargs)
+        outputs, params = self.func_space(*args, deterministic = False, params = self.params, inp_shapes = self.inp_shapes, out_shapes = self.out_shapes, **self.func_space_kwargs)
         return outputs
+
+    def load_params(self, param_values):
+        params = self.params.get_params()
+        lasagne.layers.set_all_param_values(params, param_values)
+
+    def load_params_fname(self, fname):
+        params_file = np.load(fname)
+        param_values = npz_to_array(params_f)
+        return load_params(param_values)
+
+    def save_params(self, fname):
+        params = self.params.get_params()
+        param_values = [param.get_value() for param in params]
+        np.savez_compressed(fname, *param_values)
 
     def compile(self):
         print("Compiling interface")
@@ -247,58 +251,17 @@ def compile_fns(interfaces, forallvars, axioms, options):
     #FIXME Trainable=true, deterministic = true/false
     return train_fn, call_fns
 
-def train(train_fn, generators, num_epochs = 1000):
+def train(train_fn, generators, num_epochs = 1000, summary_gap = 100):
+    """One epoch is one pass through the data set"""
     print("Starting training...")
     for epoch in range(num_epochs):
         train_err = 0
         train_batches = 0
         start_time = time.time()
-        for i in range(100):
+        for i in range(summary_gap):
             inputs = [gen.next() for gen in generators]
             losses = train_fn(*inputs)
             print("epoch: ", epoch, "losses: ", losses)
             train_err += losses[0]
             train_batches += 1
         print("epoch: ", epoch, " Total loss per epoch: ", train_err)
-
-
-# def associative_array(keyed_table_shape = (100,)):
-#     # Types
-#     KeyedTable = Type(keyed_table_shape)
-#     Key = Type(key_shape)
-#     Value = Type(val_shape)
-#     # Interface
-#     update = Interface([KeyedTable, Key, Value], [KeyedTable])
-#     delete = Interface([KeyedTable Key], [KeyedTable])
-#     find = Interface([KeyedTable, Key], [Value])
-#     # is_in = Interface([KeyedTable Key], [BoolType])
-#     # is_empty = Interface([KeyedTable], [BoolType])
-#     # interface = [store, delete, find, is_in, is_empty]
-#     interface = [update, delete, find]
-#
-#     # Variables
-#     item1 = ForAllVar(Value)
-#     key1 = ForAllVar(Key)
-#     key2 = ForAllVar(Key)
-#     kt1 = ForAllVar(KeyedTable)
-#
-#     axiom1 = find(update(kt1, )))
-#
-#
-#     Item = Type(item_shape)
-#     make = Interface([BinTree, Item, BinTree],[BinTree], res_net, layer_width=500)
-#     left_tree = Interface([BinTree], [BinTree], res_net, layer_width=500)
-#     right_tree = Interface([BinTree], [BinTree], res_net, layer_width=500)
-#     get_item = Interface([BinTree], [Item], res_net, layer_width=500)
-# #
-# # def hierarhical_concept():
-# #     ...
-#
-# def hierarhical_concept():
-#     a = 3
-#
-# def turing_machine(state_shape=(10,), Symbol(1,)):
-#     State = Type(state_shape)
-#     Symbol = Type(symbol)
-#
-#     Q_s = Constant(0)

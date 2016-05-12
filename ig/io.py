@@ -29,6 +29,11 @@ def save_dict_csv(fname, params):
         writer.writerow([key, value])
     f.close()
 
+def npz_to_array(npzfile):
+    """"Get a list of numpy arrays from a npz file"""
+    nitems = len(npzfile.keys())
+    return [npzfile['arr_%s' % i]  for i in range(nitems)]
+
 def get_filepaths(directory):
     """
     This function will generate the file names in a directory

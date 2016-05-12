@@ -48,14 +48,16 @@ def res_net(*inputs, **kwargs):
   inp_shapes = kwargs['inp_shapes']
   out_shapes = kwargs['out_shapes']
   params = kwargs['params']
+  deterministic = kwargs['deterministic']
   layer_width = kwargs['layer_width']
+  nblocks = kwargs['nblocks']
+  block_size = kwargs['block_size']
+
 
   input_width = np.sum([in_shape[1] for in_shape in inp_shapes])
   output_width = np.sum([out_shape[1] for out_shape in out_shapes])
-  n_blocks = 5
-  block_size = 3
   print("Building resnet with: %s residual blocks of size %s inner width: %s from: %s inputs to %s outputs" %
-        (n_blocks, block_size, layer_width, input_width, output_width))
+        (nblocks, block_size, layer_width, input_width, output_width))
   input_layers = [InputLayer(inp_shapes[i], input_var = inputs[i]) for i in range(len(inputs))]
 
   net = {}
@@ -70,7 +72,7 @@ def res_net(*inputs, **kwargs):
   else:
       print("Skipping input weight projection, layer_width: %s input_width: %s" % (layer_width, input_width))
       wx = prev_layer
-  for j in range(n_blocks):
+  for j in range(nblocks):
     for i in range(block_size):
       sfx = "%s_%s" % (j,i)
       net['res2d%s_%s' % (j,i)] = prev_layer = batch_norm(DenseLayer(prev_layer, layer_width,
@@ -91,7 +93,7 @@ def res_net(*inputs, **kwargs):
       net['output'] = prev_layer
 
   # Split up the final layer into necessary parts
-  output_product = lasagne.layers.get_output(net['output'])
+  output_product = lasagne.layers.get_output(net['output'], deterministic=deterministic)
   outputs = []
   lb = 0
   for out_shape in out_shapes:
@@ -107,6 +109,8 @@ def res_net(*inputs, **kwargs):
 
 # def conv_reshape(layer_in, output_shape):
 #     # Do a projection
+# def default(key, kwargs, def_val):
+#     if kwargs.
 
 def conv_res_net(*inputs, **kwargs):
   """A residual convolutional network of n inputs and m outputs.
@@ -116,16 +120,18 @@ def conv_res_net(*inputs, **kwargs):
   out_shapes = kwargs['out_shapes']
   params = kwargs['params']
   width, height = kwargs['width'], kwargs['height']
+  deterministic = kwargs['deterministic']
+  nblocks = kwargs['nblocks']
+  block_size = kwargs['block_size']
   npixels = width * height
   ninputs = len(inp_shapes)
   noutputs = len(out_shapes)
 
   input_width = np.sum([in_shape[1] for in_shape in inp_shapes])
   output_width = np.sum([out_shape[1] for out_shape in out_shapes])
-  n_blocks = 5
-  block_size = 2
+
   print("Building convnet with: %s residual blocks of size %s" %
-      (n_blocks, block_size))
+      (nblocks, block_size))
 
   # Each input is projected to a channel of the input image.
   # May need to project
@@ -160,7 +166,7 @@ def conv_res_net(*inputs, **kwargs):
   # net['resizeblock'] = prev_layer = x = lasagne.layers.ElemwiseSumLayer([wx, prev_layer])
 
   # 2d convolutional blocks
-  for j in range(n_blocks):
+  for j in range(nblocks):
       for i in range(block_size):
           sfx = "%s_%s" % (j,i)
           net['conv2d%s_%s' % (j,i)] = prev_layer = batch_norm_params(ConvLayer(prev_layer,
@@ -168,12 +174,12 @@ def conv_res_net(*inputs, **kwargs):
             W=params['W_%s' % sfx, HeNormal(gain='relu')],
             b=params['b_%s' % sfx, Constant(0)],
             pad='same'), sfx, params)
-      if n_blocks > 1:
+      if nblocks > 1:
           net['block2d%s' % j] = wx = prev_layer = lasagne.layers.ElemwiseSumLayer([prev_layer, wx])
 
     ## Output Projection
   net['output'] = prev_layer
-  output_product = lasagne.layers.get_output(net['output'])
+  output_product = lasagne.layers.get_output(net['output'], deterministic=deterministic)
   outputs = []
   for i in range(noutputs):
     outputs.append(output_product[:, i:i+1])
