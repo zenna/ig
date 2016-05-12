@@ -19,8 +19,6 @@ if theano.sandbox.cuda.dnn.dnn_available():
     from lasagne.layers.dnn import Conv3DDNNLayer as Conv3DLayer
 else:
     from lasagne.layers import Conv2DLayer as ConvLayer
-    from conv3d import Conv2D3DLayer as Conv3DLayer
-
 
 from lasagne.init import HeNormal, Constant
 
