@@ -20,33 +20,7 @@
 #     train_fn, call_fns = compile_fns([push, pop], [stack1, item1], axioms, options)
 #     train(train_fn, generators)
 
-#
-# def scalar_field_example(options, field_shape = (100,),batch_size=512):
-#     Field = Type(field_shape)
-#     Point = Type((3,))
-#     Scalar = Type((1,))
-#
-#     s = Interface([Field, Point], [Scalar], res_net, layer_width = 100)
-#     union = Interface([Field, Field], [Field], res_net, layer_width = 100)
-#     intersection = Interface([Field, Field], [Field], res_net, layer_width = 100)
-#     interfaces = [s, union, intersection]
-#
-#     field1 = ForAllVar(Field)
-#     field2 = ForAllVar(Field)
-#     point1 = ForAllVar(Point)
-#     generators = [infinite_samples(np.random.rand, batch_size, field_shape),
-#                   infinite_samples(np.random.rand, batch_size, field_shape),
-#                   infinite_samples(np.random.rand, batch_size, (3,))]
-#     global forallvars
-#     forallvars = [field1, field2, point1]
-#     # Boolean structure on scalar field
-#     # ForAll p in R3, (f1 union f2)(p) = f1(p) f2(p)
-#     axiom1 = Axiom(s(*(union(field1, field2) + [point1])), [s(field1, point1)[0] * s(field2, point1)[0]])
-#     axiom2 = Axiom(s(*(intersection(field1, field2) + [point1])), [s(field1, point1)[0] + s(field2, point1)[0]])
-#     axioms = [axiom1, axiom2]
-#     train_fn, call_fns = compile_fns(interfaces, forallvars, axioms, options)
-#     train(train_fn, generators)
-# #
+
 # def binary_tree(train_data, binary_tree_shape = (500,), item_shape = (28*28,),  batch_size = 256):
 #     BinTree = Type(binary_tree_shape)
 #     Item = Type(item_shape)

@@ -5,6 +5,7 @@ import time
 from templates import *
 from ig.io import *
 from ig.util import *
+from ig.distances import *
 
 import theano
 import theano.tensor as T
@@ -20,56 +21,6 @@ from theano import config
 import numpy as np
 import sys
 sys.setrecursionlimit(40000)
-
-def identity(x):
-    return x
-
-# Mean square error
-def mse(a, b, tnp = T):
-    eps = 1e-9
-    return (tnp.maximum(eps, (a - b)**2)).mean()
-
-# Mean square error
-def absdiff(a, b, tnp = T):
-    eps = 1e-9
-    return (tnp.maximum(eps, T.abs_(a - b))).mean()
-
-def infinite_samples(sampler, batchsize, shape):
-    while True:
-        to_sample_shape = (batchsize,)+shape
-        yield lasagne.utils.floatX(sampler(*to_sample_shape))
-
-def infinite_minibatches(inputs, batchsize, f=identity, shuffle=False):
-    start_idx = 0
-    nelements = len(inputs)
-    indices = np.arange(nelements)
-    if shuffle:
-        indices = np.arange(len(inputs))
-        np.random.shuffle(indices)
-    while True:
-        end_idx = start_idx + batchsize
-        if end_idx > nelements:
-            diff = end_idx - nelements
-            excerpt = np.concatenate([indices[start_idx:nelements], indices[0:diff]])
-            start_idx = diff
-            if shuffle:
-                indices = np.arange(len(inputs))
-                np.random.shuffle(indices)
-        else:
-            excerpt = indices[start_idx:start_idx + batchsize]
-            start_idx = start_idx + batchsize
-        yield f(inputs[excerpt])
-
-def iterate_minibatches(inputs, batchsize, shuffle=False):
-    if shuffle:
-        indices = np.arange(len(inputs))
-        np.random.shuffle(indices)
-    for start_idx in range(0, len(inputs) - batchsize + 1, batchsize):
-        if shuffle:
-            excerpt = indices[start_idx:start_idx + batchsize]
-        else:
-            excerpt = slice(start_idx, start_iiteratedx + batchsize)
-        yield inputs[excerpt]
 
 class Type():
     def __init__(self, shape, dtype = T.config.floatX, name = ''):
@@ -161,11 +112,6 @@ class Axiom():
         losses = [dist(self.lhs[i], self.rhs[i]) for i in range(len(self.lhs))]
         return losses
 
-def bound_loss(x, tnp = T) :
-  eps = 1e-9
-  loss = tnp.maximum(tnp.maximum(eps,x-1), tnp.maximum(eps,-x)) + eps
-  return tnp.maximum(loss, eps) + eps
-
 class BoundAxiom():
     "Constraints a type to be within specifiec bounds"
     def __init__(self, type, name = 'bound_loss'):
@@ -255,7 +201,7 @@ class AbstractDataType():
 class ProbDataType():
     """ A probabilistic data type gives a function (space) to each interfaces,
         a value to each constant and a random variable to each diti=rbution"""
-    def __init__(self, adt, train_fn, call_fns, generators, gen_to_inputs = identity):
+    def __init__(self, adt, train_fn, call_fns, generators, gen_to_inputs, intermediates):
         self.adt = adt
         self.train_fn = train_fn
         self.call_fns = call_fns
@@ -288,15 +234,16 @@ def get_params(interfaces, options, **tags):
 
     return params
 
-def compile_fns(interfaces, constants, forallvars, axioms, options):
+def compile_fns(interfaces, constants, forallvars, axioms, intermediates, options):
     print("Compiling training fn...")
     losses = get_losses(axioms)
     interface_params = get_params(interfaces, options, trainable=True)
     constant_params = get_params(constants, options)
     params = interface_params + constant_params
     loss = sum(losses)
+    outputs = intermediates + losses
     updates = get_updates(loss, params, options)
-    train_fn = function([forallvar.input_var for forallvar in forallvars], losses, updates = updates)
+    train_fn = function([forallvar.input_var for forallvar in forallvars], outputs, updates = updates)
     # Compile the interface for use
     if options['compile_fns']:
         print("Compiling interface fns...")
@@ -306,21 +253,28 @@ def compile_fns(interfaces, constants, forallvars, axioms, options):
     #FIXME Trainable=true, deterministic = true/false
     return train_fn, call_fns
 
-def train(train_fn, generators, gen_to_inputs = identity, num_epochs = 1000, summary_gap = 100):
+def train(train_fn, generators, gen_to_inputs = identity, nintermediates,
+          num_epochs = 1000, summary_gap = 100):
     """One epoch is one pass through the data set"""
     print("Starting training...")
     for epoch in range(num_epochs):
         train_err = 0
         train_batches = 0
         start_time = time.time()
+        intermediates = None
+        [gen.next() for gen in generators]
         for i in range(summary_gap):
-            gens = [gen.next() for gen in generators]
+            gens = [gen.send(intermediates) for gen in generators]
             inputs = gen_to_inputs(gens)
-            losses = train_fn(*inputs)
+            intermediates_losses = train_fn(*inputs)
+            intermediates = intermediates_losses[0:nintermediates]
+            losses = intermediates_losses[nintermediates:]
             print("epoch: ", epoch, "losses: ", losses)
             train_err += losses[0]
             train_batches += 1
+            gens = [gen.next() for gen in generators]
         print("epoch: ", epoch, " Total loss per epoch: ", train_err)
 
 def train_pbt(pbt, **kwargs):
-    train(pbt.train_fn, pbt.generators, pbt.gen_to_inputs, **kwargs)
+    train(pbt.train_fn, pbt.generators, pbt.gen_to_inputs, len(pbt.intermediates),
+          **kwargs)
