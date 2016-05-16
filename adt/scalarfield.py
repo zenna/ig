@@ -64,8 +64,8 @@ def get_batch_sizes(ratios, batch_size):
     ratio_counts = (ratios[0:-1] * batch_size).astype('int')
     left_over = batch_size - np.sum(ratio_counts)
     ratio_counts = np.concatenate([ratio_counts, [left_over]])
-    assert batch_size = np.sum(ratio_counts)
-    assert (ratio_counts() > 0).all()
+    assert batch_size == np.sum(ratio_counts)
+    assert (ratio_counts > 0).all()
     return ratio_counts
 
 def handle_field(batch, intermediates, indices, batch_size, ratios):
@@ -75,17 +75,8 @@ def handle_field(batch, intermediates, indices, batch_size, ratios):
         intermediate = intermediates[i]
         valid_intermediates.append(intermdiate)
 
-    # convert ratios into integer counts for each intermediate and batch
-    ratios = floatX(ratios)
-    assert len(ratios) == len(valid_intermediates)+1
-    ratio_counts = (ratios[0:-1] * batch_size).astype('int')
-    left_over = batch_size - np.sum(ratio_counts)
-    ratio_counts = np.concatenate([ratio_counts, [left_over]])
-
-    batches = []
-    for i in
-
-
+    assert len(ratios) == len(valid_intermediates)
+    return ratio_scaling(valid_intermediates, ratios, tnp = np)
 
 
 def destructure(x):
@@ -94,15 +85,16 @@ def destructure(x):
     for i in range(len(x) - 1):
         outputs.append(x[i][0])
         outputs.append(x[i][1])
+
     outputs.append(x[-1]) # poss diff
     return outputs
 
-def f(zero_field, field):
-    # Zero field will be of 1 batc
-    # and field
+def f(zero_field, field, zero_batch_size):
+    zero_field_batch = repeat_to_batch(zero_field.input_var, zero_batch_size)
+    return T.concatenate(zero_field_batch, field[zero_batch_size:])
 
-def scalar_field_example(voxel_grids, res, options, niters = 3, field_shape = (100,), npoints = 100,
-                         batch_size=64, s_args = {}, add_args = {}):
+def scalar_field_example(voxel_grids, res, options, niters = 3, field_shape = (100,),
+                         npoints = 100, batch_size=64, s_args = {}, add_args = {}):
     ## Types
     points_shape = (npoints,3)
     Field = Type(field_shape)
@@ -124,14 +116,15 @@ def scalar_field_example(voxel_grids, res, options, niters = 3, field_shape = (1
     poses = [ForAllVar(Points) for i in range(niters*2)]
     forallvars = poses + [pos_perturb, field]
 
-    ## Generators
+    ## PreProcessing
+    # Field
     zero_field_batch = repeat_to_batch(zero_field.input_var, batch_size)
-    field = f(zero_field.input_var, field.input_Var)
-
-    pos1_pos2_gen = [send_infinite_minibatches(voxel_grids, batch_size,
-                    f = lambda x : create_pos_neg_batch(x, npoints, res), shuffle=True) for i in range(niters)]
-    pos_perturb_gen = infinite_samples(lambda *x: np.random.rand(*x) * 1.0/res, batch_size, points_shape)
-    generators = pos1_pos2_gen + [pos_perturb_gen]
+    zero_batch_frac = 0.5
+    nfields = niters
+    rest = zero_batch_frac/nfields
+    ratios = [zero_batch_frac] + [rest for i in range(nfields)]
+    batch_sizes = get_batch_sizes(ratios, batch_size)
+    field = f(zero_field.input_var, field.input_Var, batch_sizes[0])
 
     # Since pos1 and pos2 batches are dependent (use the same generator),
     # we need to define a a gen_to_inputs to generate inputs from
@@ -146,13 +139,13 @@ def scalar_field_example(voxel_grids, res, options, niters = 3, field_shape = (1
     axioms.append(axiom1)
     axioms.append(axiom2)
 
-    intermediates = []
+    fields = []
 
     # If you add a point to a field, the scalar value of that point becomes one
     # and everything else is unchanged
-    for i in range(0,niters*2,2intermediates):
+    for i in range(0,niters*2,2):
         (newfield,) = add(field, poses[i].input_var)
-        intermediates.appends(newfield)
+        fields.appends(newfield)
         axiom2 = Axiom(s(newfield, poses[i].input_var + pos_perturb.input_var), (1,))
         axiom3 = Axiom(s(newfield, poses[i+1].input_var + pos_perturb.input_var),
                        s(zero_field_batch, poses[i+1].input_var + pos_perturb.input_var))
@@ -160,10 +153,16 @@ def scalar_field_example(voxel_grids, res, options, niters = 3, field_shape = (1
         axioms.append(axiom2)
         axioms.append(axiom3)
 
-    ## ratios
-    get_batch_sizes
+    intermediates = [zero_field.input_var] + fields
+    ## Generators
+    field_gen = constant_minibatches(x, f= lambda batch, intermediates :
+        handle_field(batch, intermediates, indices, batch_size, ratios)
+    pos1_pos2_gen = [send_infinite_minibatches(voxel_grids, batch_size,
+                    f = lambda x : create_pos_neg_batch(x, npoints, res), shuffle=True) for i in range(niters)]
+    pos_perturb_gen = infinite_samples(lambda *x: np.random.rand(*x) * 1.0/res, batch_size, points_shape)
+    generators = pos1_pos2_gen + [pos_perturb_gen, field_gen]
 
-    train_fn, call_fns = compile_fns(interfaces, constants, forallvars, axioms, intermediates, options)
+    train_fn, call_fns = compile_fns(interfaces, constants, forallvars, axioms, fields, options)
     scalar_field_adt = AbstractDataType(interfaces, constants, forallvars, axioms, name = 'scalar field')
     scalar_field_pbt = ProbDataType(scalar_field_adt, train_fn, call_fns, generators, gen_to_inputs, intermediates)
     return scalar_field_adt, scalar_field_pbt
@@ -184,8 +183,8 @@ def main(argv):
     options['compile_fns'] = True
     options['save_params'] = True
     options['train'] = True
-    options['nblocks'] = 4
-    options['block_size'] = 2
+    options['nblocks'] = 1
+    options['block_size'] = 1
     options['batch_size'] = 512
     options['nfilters'] = 24
     options['layer_width'] = 101
