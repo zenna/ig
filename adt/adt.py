@@ -18,18 +18,28 @@ from theano import function
 from theano import config
 
 import numpy as np
+import sys
+sys.setrecursionlimit(40000)
+
+def identity(x):
+    return x
 
 # Mean square error
 def mse(a, b, tnp = T):
     eps = 1e-9
     return (tnp.maximum(eps, (a - b)**2)).mean()
 
+# Mean square error
+def absdiff(a, b, tnp = T):
+    eps = 1e-9
+    return (tnp.maximum(eps, T.abs_(a - b))).mean()
+
 def infinite_samples(sampler, batchsize, shape):
     while True:
         to_sample_shape = (batchsize,)+shape
         yield lasagne.utils.floatX(sampler(*to_sample_shape))
 
-def infinite_minibatches(inputs, batchsize, shuffle=False):
+def infinite_minibatches(inputs, batchsize, f=identity, shuffle=False):
     start_idx = 0
     nelements = len(inputs)
     indices = np.arange(nelements)
@@ -48,7 +58,7 @@ def infinite_minibatches(inputs, batchsize, shuffle=False):
         else:
             excerpt = indices[start_idx:start_idx + batchsize]
             start_idx = start_idx + batchsize
-        yield inputs[excerpt]
+        yield f(inputs[excerpt])
 
 def iterate_minibatches(inputs, batchsize, shuffle=False):
     if shuffle:
@@ -95,25 +105,35 @@ class Interface():
         params = Params()
         self.inp_shapes = [type.get_shape(add_batch=True) for type in lhs]
         self.out_shapes = [type.get_shape(add_batch=True) for type in rhs]
-        outputs, params = func_space(*self.inputs, deterministic = True, params = params, inp_shapes = self.inp_shapes, out_shapes = self.out_shapes, **self.func_space_kwargs)
+        # output_args = {'batch_norm_update_averages' : True, 'batch_norm_use_averages' : True}
+        output_args = {'deterministic' : True}
+        outputs, params = func_space(*self.inputs, output_args = output_args, params = params, inp_shapes = self.inp_shapes, out_shapes = self.out_shapes, **self.func_space_kwargs)
+        params.lock()
         self.params = params
         self.outputs = outputs
 
     def __call__(self, *raw_args):
         args = [arg.input_var if hasattr(arg, 'input_var') else arg for arg in raw_args]
         print("Calling", args)
-        shapes = [type.get_shape(add_batch=True) for type in self.lhs]
-        outputs, params = self.func_space(*args, deterministic = False, params = self.params, inp_shapes = self.inp_shapes, out_shapes = self.out_shapes, **self.func_space_kwargs)
+        # shapes = [type.get_shape(add_batch=True) for type in self.lhs]
+        # output_args = {'batch_norm_update_averages' : True, 'batch_norm_use_averages' : False}
+        output_args = {'deterministic' : False}
+        outputs, params = self.func_space(*args, output_args = output_args, params = self.params, inp_shapes = self.inp_shapes, out_shapes = self.out_shapes, **self.func_space_kwargs)
         return outputs
+
+    def get_params(self, **tags):
+        return self.params.get_params(**tags)
 
     def load_params(self, param_values):
         params = self.params.get_params()
-        lasagne.layers.set_all_param_values(params, param_values)
+        assert len(param_values) == len(params), "Tried to load invalid param file"
+        for i in range(len(params)):
+            params[i].set_value(param_values[i])
 
     def load_params_fname(self, fname):
         params_file = np.load(fname)
-        param_values = npz_to_array(params_f)
-        return load_params(param_values)
+        param_values = npz_to_array(params_file)
+        return self.load_params(param_values)
 
     def save_params(self, fname):
         params = self.params.get_params()
@@ -154,9 +174,19 @@ class BoundAxiom():
     def get_losses(self):
         return [bound_loss(self.input_var).mean()]
 
-# class Constant():
-#     def __init__(self, value):
-#         self.value = shared(value)
+class Constant():
+    def __init__(self, type, spec=lasagne.init.GlorotUniform(), name = 'C'):
+        self.type = type
+        shape = type.get_shape(add_batch=True, batch_size=1)
+        arr = spec(shape)
+        arr = floatX(arr)
+        assert arr.shape == shape
+        broadcastable = (True,) + (False,) * (len(shape) - 1)
+        # broadcastable = None
+        self.input_var = theano.shared(arr, name=name, broadcastable=broadcastable)
+
+    def get_params(self, **tags):
+        return [self.input_var]
 
 class Params():
     def __init__(self):
@@ -176,14 +206,19 @@ class Params():
 
     def get(self, key, default_value):
         if self.params.has_key(key):
+            # print("Retrieving Key")
             return self.params[key]
         else:
             assert not self.is_locked, "Attempted to create parameter from locked params"
+            # print("Creating new key")
             param = default_value
             self.params[key] = param
             return param
 
     def set(self, key, value):
+        if self.is_locked:
+            # print("Not Setting, locked")
+            return
         if self.params.has_key(key):
             self.params[key] = value
         else:
@@ -209,6 +244,24 @@ class Params():
 
         return lasagne.utils.collect_shared_vars(result)
 
+class AbstractDataType():
+    def __init__(self, interfaces, constants, forallvars, axioms, name = ''):
+        self.interfaces = interfaces
+        self.constants = constants
+        self.forallvars = forallvars
+        self.axioms = axioms
+        self.name = name
+
+class ProbDataType():
+    """ A probabilistic data type gives a function (space) to each interfaces,
+        a value to each constant and a random variable to each diti=rbution"""
+    def __init__(self, adt, train_fn, call_fns, generators, gen_to_inputs = identity):
+        self.adt = adt
+        self.train_fn = train_fn
+        self.call_fns = call_fns
+        self.generators = generators
+        self.gen_to_inputs = gen_to_inputs
+
 def get_updates(loss, params, options):
     updates = {}
     print("Params",params)
@@ -230,15 +283,17 @@ def get_losses(axioms):
 def get_params(interfaces, options, **tags):
     params = []
     for interface in interfaces:
-        for param in interface.params.get_params(**tags):
+        for param in interface.get_params(**tags):
             params.append(param)
 
     return params
 
-def compile_fns(interfaces, forallvars, axioms, options):
+def compile_fns(interfaces, constants, forallvars, axioms, options):
     print("Compiling training fn...")
     losses = get_losses(axioms)
-    params = get_params(interfaces, options, trainable=True)
+    interface_params = get_params(interfaces, options, trainable=True)
+    constant_params = get_params(constants, options)
+    params = interface_params + constant_params
     loss = sum(losses)
     updates = get_updates(loss, params, options)
     train_fn = function([forallvar.input_var for forallvar in forallvars], losses, updates = updates)
@@ -251,7 +306,7 @@ def compile_fns(interfaces, forallvars, axioms, options):
     #FIXME Trainable=true, deterministic = true/false
     return train_fn, call_fns
 
-def train(train_fn, generators, num_epochs = 1000, summary_gap = 100):
+def train(train_fn, generators, gen_to_inputs = identity, num_epochs = 1000, summary_gap = 100):
     """One epoch is one pass through the data set"""
     print("Starting training...")
     for epoch in range(num_epochs):
@@ -259,9 +314,13 @@ def train(train_fn, generators, num_epochs = 1000, summary_gap = 100):
         train_batches = 0
         start_time = time.time()
         for i in range(summary_gap):
-            inputs = [gen.next() for gen in generators]
+            gens = [gen.next() for gen in generators]
+            inputs = gen_to_inputs(gens)
             losses = train_fn(*inputs)
             print("epoch: ", epoch, "losses: ", losses)
             train_err += losses[0]
             train_batches += 1
         print("epoch: ", epoch, " Total loss per epoch: ", train_err)
+
+def train_pbt(pbt, **kwargs):
+    train(pbt.train_fn, pbt.generators, pbt.gen_to_inputs, **kwargs)

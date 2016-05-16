@@ -4,124 +4,228 @@ theano.config.optimizer = 'fast_compile'
 theano.config.optimizer = 'None'
 from adt import *
 from mnist import *
+from ig.util import *
 
-def stack_example(train_data, options, stack_shape = (100,), item_shape = (28*28,), batch_sizes = (256, 256)):
-    Stack = Type(stack_shape)
-    Item = Type(item_shape)
-    push = Interface([Stack, Item],[Stack], res_net, layer_width=100)
-    pop = Interface([Stack],[Stack, Item], res_net, layer_width=884)
-    stack1 = ForAllVar(Stack)
-    item1 = ForAllVar(Item)
-    global axiom1
-    generators = [infinite_samples(np.random.rand, batch_sizes[0], stack_shape),
-                  infinite_minibatches(train_data, batch_sizes[1], True)]
 
-    # Axioms
-    (pushed_stack,) = push(stack1.input_var, item1.input_var)
-    (popped_stack, popped_item) = pop(pushed_stack)
-
-    axiom1 = Axiom((popped_stack, popped_item), (stack1.input_var, item1.input_var))
-    axiom2 = BoundAxiom(pushed_stack)
-    axiom3 = BoundAxiom(popped_stack)
-    axioms = [axiom1, axiom2, axiom3]
-    train_fn, call_fns = compile_fns([push, pop], [stack1, item1], axioms, options)
-    train(train_fn, generators)
-
-def stack_example_conv(train_data, options, stack_shape = (1,28,28), item_shape = (1,28,28), batch_sizes = (512, 512)):
+def stack_example_conv(train_data, options, stack_shape = (1,28,28),
+        push_args = {}, pop_args = {}, item_shape = (1,28,28), batch_size = 512):
     # Types
     Stack = Type(stack_shape)
     Item = Type(item_shape)
 
     # Interface
-    push = Interface([Stack, Item],[Stack], conv_res_net, width=28, height = 28, nblocks = 5, block_size = 2)
-    pop = Interface([Stack],[Stack, Item], conv_res_net, width=28, height = 28, nblocks = 5, block_size = 2)
+    push = Interface([Stack, Item],[Stack], conv_res_net, width=28, height = 28,
+        **push_args)
+    pop = Interface([Stack],[Stack, Item], conv_res_net, width=28, height = 28,
+        **pop_args)
     interfaces = [push, pop]
 
+    # Constants
+    empty_stack = Constant(Stack)
+    constants = [empty_stack]
+
     # Vars
-    stack1 = ForAllVar(Stack)
+    # stack1 = ForAllVar(Stack)
     item1 = ForAllVar(Item)
 
     # Generators
-    generators = [infinite_samples(np.random.rand, batch_sizes[0], stack_shape),
-                  infinite_minibatches(train_data, batch_sizes[1], True)]
-    forallvars = [stack1, item1]
+    generators = [infinite_minibatches(train_data, batch_size, True)]
+    # generators = [infinite_samples(np.random.rand, batch_size, stack_shape),
+    #               infinite_minibatches(train_data, batch_size, True)]
+    forallvars = [item1]
+    # forallvars = [stack1, item1]
 
     # Axioms
-    (pushed_stack,) = push(stack1.input_var, item1.input_var)
+    es = T.repeat(empty_stack.input_var, batch_size, axis=0)
+    (pushed_stack,) = push(es, item1.input_var)
+    # (pushed_stack,) = push(stack1.input_var, item1.input_var)
     (popped_stack, popped_item) = pop(pushed_stack)
 
-    axiom1 = Axiom((popped_stack, popped_item), (stack1.input_var, item1.input_var))
-    axiom2 = BoundAxiom(pushed_stack)
-    axiom3 = BoundAxiom(popped_stack)
-    axioms = [axiom1, axiom2, axiom3]
-    train_fn, call_fns = compile_fns(interfaces, forallvars, axioms, options)
-    return interfaces, forallvars, axioms, generators, train_fn, call_fns
-#
-# def scalar_field_example(options, field_shape = (100,),batch_size=512):
-#     Field = Type(field_shape)
-#     Point = Type((3,))
-#     Scalar = Type((1,))
-#
-#     s = Interface([Field, Point], [Scalar], res_net, layer_width = 100)
-#     union = Interface([Field, Field], [Field], res_net, layer_width = 100)
-#     intersection = Interface([Field, Field], [Field], res_net, layer_width = 100)
-#     interfaces = [s, union, intersection]
-#
-#     field1 = ForAllVar(Field)
-#     field2 = ForAllVar(Field)
-#     point1 = ForAllVar(Point)
-#     generators = [infinite_samples(np.random.rand, batch_size, field_shape),
-#                   infinite_samples(np.random.rand, batch_size, field_shape),
-#                   infinite_samples(np.random.rand, batch_size, (3,))]
-#     global forallvars
-#     forallvars = [field1, field2, point1]
-#     # Boolean structure on scalar field
-#     # ForAll p in R3, (f1 union f2)(p) = f1(p) f2(p)
-#     axiom1 = Axiom(s(*(union(field1, field2) + [point1])), [s(field1, point1)[0] * s(field2, point1)[0]])
-#     axiom2 = Axiom(s(*(intersection(field1, field2) + [point1])), [s(field1, point1)[0] + s(field2, point1)[0]])
-#     axioms = [axiom1, axiom2]
-#     train_fn, call_fns = compile_fns(interfaces, forallvars, axioms, options)
-#     train(train_fn, generators)
-# #
-# def binary_tree(train_data, binary_tree_shape = (500,), item_shape = (28*28,),  batch_size = 256):
-#     BinTree = Type(binary_tree_shape)
-#     Item = Type(item_shape)
-#     make = Interface([BinTree, Item, BinTree],[BinTree], res_net, layer_width=500)
-#     left_tree = Interface([BinTree], [BinTree], res_net, layer_width=500)
-#     right_tree = Interface([BinTree], [BinTree], res_net, layer_width=500)
-#     get_item = Interface([BinTree], [Item], res_net, layer_width=500)
-#     # is_empty = Interface([BinTree], [BoolType])
-#
-#     bintree1 = ForAllVar(BinTree)
-#     bintree2 = ForAllVar(BinTree)
-#     item1 = ForAllVar(Item)
-#     # error = Constant(np.random.rand(item_shape))
-#
-#     # axiom1 = Axiom(left_tree(create), error)
-#     make_stuff = make(bintree1.input_var, item1.input_var, bintree2.input_var)
-#     axiom2 = Axiom(left_tree(*make_stuff), (bintree1.input_var,))
-#     # axiom3 = Axiom(right_tree(create), error)
-#     axiom4 = Axiom(right_tree(*make_stuff), (bintree2.input_var,))
-#     # axiom5 = Axiom(item(create), error) # FIXME, how to handle True
-#     axiom6 = Axiom(get_item(*make_stuff), (item1.input_var,))
-#     # axiom7 = Axiom(is_empty(create), True)
-#     # axiom8 = Axiom(is_empty(make(bintree1.input_var, item1, bintree2)), False)
-#     interfaces = [make, left_tree, right_tree, get_item]
-#     # axioms = [axiom1, axiom2, axiom3, axiom4, axiom5, axiom6, axiom6, axiom7. axiom8]
-#     axioms = [axiom2, axiom4, axiom6]
-#     forallvars = [bintree1, bintree2, item1]
-#     generators = [infinite_samples(np.random.rand, batch_size, binary_tree_shape),
-#                  infinite_samples(np.random.rand, batch_size, binary_tree_shape),
-#                  infinite_minibatches(train_data, batch_size, True)]
-#     train_fn, call_fns = compile_fns(interfaces, forallvars, axioms, options)
-#     train(train_fn, generators)
+    axiom1 = Axiom((popped_stack, popped_item), (empty_stack.input_var, item1.input_var))
+    # axiom1 = Axiom((popped_stack, popped_item), (stack1.input_var, item1.input_var))
+    # axiom2 = BoundAxiom(pushed_stack)
+    # axiom3 = BoundAxiom(popped_stack)
+    axioms = [axiom1]
+    # axioms = [axiom1, axiom2, axiom3]
+    train_fn, call_fns = compile_fns(interfaces, constants, forallvars, axioms, options)
+    return interfaces, constants, forallvars, axioms, generators, train_fn, call_fns
 
-def validate_stack(X_train, push, pop, lb, ub):
-    imgbatch = floatX(X_train[lb:ub])
-    stackbatch = floatX(np.random.rand(ub-lb,1,28,28))
+def stack_example_conv_rec_lord(train_data, options, stack_shape = (1,28,28),
+        push_args = {}, pop_args = {}, item_shape = (1,28,28), batch_size = 512):
+    # Types
+    Stack = Type(stack_shape)
+    Item = Type(item_shape)
+
+    # Interface
+    push = Interface([Stack, Item],[Stack], conv_res_net, width=28, height = 28,
+        **push_args)
+    pop = Interface([Stack],[Stack, Item], conv_res_net, width=28, height = 28,
+        **pop_args)
+    interfaces = [push, pop]
+
+    # Constants
+    empty_stack = Constant(Stack)
+    constants = [empty_stack]
+
+    # Vars
+    # stack1 = ForAllVar(Stack)
+    nitems = 3
+    items = [ForAllVar(Item) for i in range(nitems)]
+    axioms = []
+
+    batch_empty_stack = T.repeat(empty_stack.input_var, batch_size, axis=0)
+    stack = batch_empty_stack
+    for i in range(nitems):
+        (stack,) = push(stack, items[i].input_var)
+        pop_stack = stack
+        for j in range(i,-1,-1):
+            (pop_stack, pop_item) = pop(pop_stack)
+            axiom = Axiom((pop_item,), (items[j].input_var,))
+            axioms.append(axiom)
+
+    # Generators
+    generators = [infinite_minibatches(train_data, batch_size, True) for i in range(nitems)]
+    forallvars = items
+    train_fn, call_fns = compile_fns(interfaces, constants, forallvars, axioms, options)
+    return interfaces, constants, forallvars, axioms, generators, train_fn, call_fns
+
+
+def stack_example_conv_rec(train_data, options, stack_shape = (1,28,28),
+        push_args = {}, pop_args = {}, item_shape = (1,28,28), batch_size = 512):
+    # Types
+    Stack = Type(stack_shape)
+    Item = Type(item_shape)
+
+    # Interface
+    push = Interface([Stack, Item],[Stack], conv_res_net, width=28, height = 28,
+        **push_args)
+    pop = Interface([Stack],[Stack, Item], conv_res_net, width=28, height = 28,
+        **pop_args)
+    interfaces = [push, pop]
+
+    # Constants
+    empty_stack = Constant(Stack)
+    constants = [empty_stack]
+
+
+    # Vars
+    # stack1 = ForAllVar(Stack)
+    item1 = ForAllVar(Item)
+    item2 = ForAllVar(Item)
+    item3 = ForAllVar(Item)
+
+    # Generators
+    generators = [infinite_minibatches(train_data, batch_size, True),
+                  infinite_minibatches(train_data, batch_size, True),
+                  infinite_minibatches(train_data, batch_size, True)]
+    forallvars = [item1, item2, item3]
+
+    # Axioms
+    es = T.repeat(empty_stack.input_var, batch_size, axis=0)
+    (pushed_stack,) = push(es, item1.input_var)
+    (popped_stack, popped_item) = pop(pushed_stack)
+    axiom1 = Axiom((popped_stack, popped_item), (es, item1.input_var))
+
+    (p_pushed_stack,) = push(pushed_stack, item2.input_var)
+    (p_popped_stack, p_popped_item) = pop(p_pushed_stack)
+    axiom2 = Axiom((p_popped_stack, p_popped_item), (pushed_stack, item2.input_var))
+
+    (p_p_pushed_stack,) = push(p_pushed_stack, item3.input_var)
+    (p_p_popped_stack, p_p_popped_item) = pop(p_p_pushed_stack)
+    axiom3 = Axiom((p_p_popped_stack, p_p_popped_item), (p_pushed_stack, item3.input_var))
+
+    # baxiom1 = BoundAxiom(pushed_stack)
+    # baxiom2 = BoundAxiom(popped_stack)
+    # axioms = [axiom1]
+    axioms = [axiom1, axiom2, axiom3]
+    train_fn, call_fns = compile_fns(interfaces, constants, forallvars, axioms, options)
+    return interfaces, constants, forallvars, axioms, generators, train_fn, call_fns
+
+
+## Validation
+## =========
+
+def rand_int(n):
+    return int(np.random.rand() * n)
+
+def validate_what(data, batch_size, nitems, es, push, pop):
+    datalen = data.shape[0]
+    es = np.repeat(es,batch_size,axis=0)
+    data_indices = [rand_int(datalen-batch_size) for i in range(nitems)]
+    items = [data[data_indices[i]:data_indices[i]+batch_size] for i in range(nitems)]
+    losses = []
+    stack = es
+    for i in range(nitems):
+        (stack,) = push(stack, items[i])
+        pop_stack = stack
+        for j in range(i,-1,-1):
+            (pop_stack, pop_item) = pop(pop_stack)
+            loss = mse(pop_item, items[j], tnp = np)
+            losses.append(loss)
+    print(losses)
+
+def validate_3stack_img(item1, item2, item3, es, push, pop, lb, ub):
+    (pushed_stack,) = push(es, item1)
+    (popped_stack, popped_item) = pop(pushed_stack)
+    loss1 = mse(popped_stack, es, tnp = np)
+    loss2 = mse(popped_item, item1, tnp = np)
+
+    (p_pushed_stack,) = push(pushed_stack, item2)
+    (p_popped_stack, p_popped_item) = pop(p_pushed_stack)
+    loss3 = mse(p_popped_stack, pushed_stack, tnp = np)
+    loss4 = mse(p_popped_item, item2, tnp = np)
+
+    (p_p_pushed_stack,) = push(p_pushed_stack, item3)
+    (p_p_popped_stack, p_p_popped_item) = pop(p_p_pushed_stack)
+    loss5 = mse(p_p_popped_stack, p_pushed_stack, tnp = np)
+    loss6 = mse(p_p_popped_item, item3, tnp = np)
+
+    loss = [loss1, loss2, loss3, loss4, loss5, loss6]
+    print(loss)
+    stacks =  [pushed_stack, popped_stack, p_pushed_stack, p_popped_stack, p_p_pushed_stack, p_p_popped_stack]
+    items = [item1, item2, item3, popped_item, p_popped_item, p_p_popped_item]
+    return stacks, items
+
+
+def validate_stack_img(imgbatch, stackbatch, push, pop, lb, ub):
     (new_stack,) = push(stackbatch,imgbatch)
     (old_new_stack, img) = pop(new_stack)
-    print(mse(img, imgbatch, tnp = np))
+    loss1 = mse(old_new_stack, stackbatch, tnp = np)
+    loss2 = mse(img, imgbatch, tnp = np)
+    loss = [loss1, loss2]
+    print(loss)
+    return loss, stackbatch, imgbatch, old_new_stack, img
+
+def validate_stack(data, push, pop, lb, ub):
+    imgbatch = floatX(data[lb:ub])
+    return validate_stack_img(imgbatch, push, pop, lb, ub)
+
+def whitenoise_trick():
+    new_img = floatX(np.array(np.random.rand(1,1,28,28)*2**8, dtype='int'))/256
+    for i in range(1000):
+        loss, stack, img, new_stack, new_img = validate_stack(new_img, X_train, push, pop, 0, 512)
+
+def stack_unstack(n, stack, offset=0):
+    lb = 0 + offset
+    ub = 1 + offset
+    imgs = []
+    stacks = []
+    stacks.append(stack)
+    for i in range(n):
+        new_img = floatX(X_train[lb+i:ub+i])
+        imgs.append(new_img)
+        (stack,) = push(stack,new_img)
+        stacks.append(stack)
+
+    for i in range(n):
+        (stack, old_img) = pop(stack)
+        stacks.append(stack)
+        imgs.append(old_img)
+
+    return stacks + imgs
+
+def whitenoise(batch_size):
+    return floatX(np.array(np.random.rand(batch_size,1,28,28)*2**8, dtype='int'))/256
 
 def main(argv):
     ## Args
@@ -129,80 +233,50 @@ def main(argv):
     global test_files, train_files
     global net, output_layer, cost_f, cost_f_dict, val_f, call_f, call_f_dict
     global views, outputs, net
-    global interfaces, forallvars, axioms, train_fn, call_fns
+    global interfaces, constants, forallvars, axioms, generators, train_fn, call_fns
+    global push, pop
 
     options = handle_args(argv)
-    options['num_epochs'] = 10
+    options['num_epochs'] = 50
     options['compile_fns'] = True
-    options['load_params'] = True
     options['save_params'] = True
     options['train'] = True
+    options['nblocks'] = 1
+    options['block_size'] = 2
+    options['batch_size'] = 512
+    options['nfilters'] = 24
+    func_args = {'nblocks' : options['nblocks'], 'block_size' : options['block_size']}
+
+    sfx_dict = {}
+    for key in ('nblocks', 'block_size', 'nfilters'):
+        sfx_dict[key] = options[key]
+    sfx = stringy_dict(sfx_dict)
+    print("sfx:", sfx)
 
     print(options)
-
+    global X_train
     X_train, y_train, X_val, y_val, X_test, y_test = load_dataset()
-    interfaces, forallvars, axioms, generators, train_fn, call_fns = stack_example_conv(X_train, options)
+    interfaces, constants, forallvars, axioms, generators, train_fn, call_fns = stack_example_conv_rec_lord(
+        X_train, options, push_args = options,
+        pop_args = options, batch_size = options['batch_size'])
     push, pop = call_fns
 
     if options['load_params'] == True:
         for i in range(len(interfaces)):
-            interfaces[i].load_params("stack_interface_%s" % i)
+            interfaces[i].load_params_fname("%s_stack_interface_%s.npz" % (sfx, i))
+        print("Loaded params")
 
     if options['train'] == True:
         train(train_fn, generators, num_epochs = options['num_epochs'])
 
     if options['save_params'] == True:
         for i in range(len(interfaces)):
-            interfaces[i].save_params("stack_interface_%s" % i)
+            interfaces[i].save_params("%s_stack_interface_%s" % (sfx, i))
+        print("saved params")
 
-    validate_stack(X_train, push, pop, 0, 512)
-
-
-    # stack_example_conv(X_train, options)
-    # binary_tree(X_train.reshape(50000,28*28))
-    # scalar_field_example()
+    loss, stack, img, new_stack, new_img = validate_stack_img_rec(new_img, X_train, push, pop, 0, 1)
 
 
-# def associative_array(keyed_table_shape = (100,)):
-#     # Types
-#     KeyedTable = Type(keyed_table_shape)
-#     Key = Type(key_shape)
-#     Value = Type(val_shape)
-#     # Interface
-#     update = Interface([KeyedTable, Key, Value], [KeyedTable])
-#     delete = Interface([KeyedTable Key], [KeyedTable])
-#     find = Interface([KeyedTable, Key], [Value])
-#     # is_in = Interface([KeyedTable Key], [BoolType])
-#     # is_empty = Interface([KeyedTable], [BoolType])
-#     # interface = [store, delete, find, is_in, is_empty]
-#     interface = [update, delete, find]
-#
-#     # Variables
-#     item1 = ForAllVar(Value)
-#     key1 = ForAllVar(Key)
-#     key2 = ForAllVar(Key)
-#     kt1 = ForAllVar(KeyedTable)
-#
-#     axiom1 = find(update(kt1, )))
-#
-#
-#     Item = Type(item_shape)
-#     make = Interface([BinTree, Item, BinTree],[BinTree], res_net, layer_width=500)
-#     left_tree = Interface([BinTree], [BinTree], res_net, layer_width=500)
-#     right_tree = Interface([BinTree], [BinTree], res_net, layer_width=500)
-#     get_item = Interface([BinTree], [Item], res_net, layer_width=500)
-# #
-# # def hierarhical_concept():
-# #     ...
-#
-# def hierarhical_concept():
-#     a = 3
-#
-# def turing_machine(state_shape=(10,), Symbol(1,)):
-#     State = Type(state_shape)
-#     Symbol = Type(symbol)
-#
-#     Q_s = Constant(0)
 
 
 if __name__ == "__main__":

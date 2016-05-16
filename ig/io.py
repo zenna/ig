@@ -14,6 +14,21 @@ def load_voxels_binary(fname, width, height, depth, max_value=255.0, zoom = 1, o
     else:
         return scipy.ndimage.zoom(voxels, zoom, order = order)
 
+# def load_all_data(data, zoom = 1):
+#     datas = []
+#     for i in range(len(fnames)):
+#         print(i, "out of", len(fnames))
+#         data = np.fromfile(fnames[i], dtype='uint8')
+#         voxels = np.reshape(data, (128, 128, 128))
+#         datas.append(scipy.ndimage.zoom(voxels, zoom, order = order))
+
+def remove_elements(data, res):
+    max_value = res**3*255
+    summation = datasnp.sum(axis=(1,2,3))
+    isgood = np.logical_and(summation < max_value, summation > 0)
+    iss = np.where(isgood)
+
+
 def save_params(fname, params):
     f = open(fname, 'w')
     writer = csv.writer(f)

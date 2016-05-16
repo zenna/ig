@@ -282,8 +282,8 @@ def mk_dir():
 def make_dict_output(f, dict):
     lambda x: f(x)
 
-def loss_data(filenames, nviews, render, f):
-    voxel_data = [load_voxels_binary(v, 128, 128, 128, zoom = 0.5)*10.0 for v in filenames]
+def loss_data(filenames, nviews, render, f, res, zoom = 1):
+    voxel_data = [load_voxels_binary(v, res, res, res, zoom = zoom)*10.0 for v in filenames]
     voxel_dataX = [np.array(v,dtype=config.floatX) for v in voxel_data]
     r = rand_rotation_matrices(nviews)
     print("Rendering Training Data")

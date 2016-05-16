@@ -1,5 +1,18 @@
 import numpy as np
 
+def stringy(ls):
+    out = ""
+    for l in ls:
+        out = out + str(l) + "_"
+    return out
+
+def stringy_dict(d):
+    out = ""
+    for (key,val) in d.items():
+        if val is not None and val is not '':
+            out = out + "%s:%s_" % (str(key), str(val))
+    return out
+
 def rand_rotation_matrix(deflection=1.0, randnums=None, floatX = 'float32'):
     """
     Creates a random rotation matrix.
