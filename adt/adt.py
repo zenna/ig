@@ -22,28 +22,31 @@ import numpy as np
 import sys
 sys.setrecursionlimit(40000)
 
+
 class Type():
-    def __init__(self, shape, dtype = T.config.floatX, name = ''):
+    def __init__(self, shape, dtype=T.config.floatX, name=''):
         self.shape = shape
         self.dtype = dtype
         self.tensor_id = 0
         self.name = name
 
-    def tensor(self, name = None, add_batch=False):
-        if name == None:
+    def tensor(self, name=None, add_batch=False):
+        if name is None:
             name = "%s_%s" % (self.name, self.tensor_id)
             self.tensor_id += 1
         # Create a tensor for this shape
         ndims = len(self.shape)
         if add_batch:
             ndims += 1
-        return T.TensorType(dtype=self.dtype, broadcastable=(False,)*ndims)(name)
+        return T.TensorType(dtype=self.dtype,
+                            broadcastable=(False,)*ndims)(name)
 
-    def get_shape(self, add_batch = False, batch_size = None):
+    def get_shape(self, add_batch=False, batch_size=None):
         if add_batch:
             return (batch_size,) + self.shape
         else:
             return self.shape
+
 
 class Interface():
     def __init__(self, lhs, rhs, func_space, **func_space_kwargs):
@@ -56,9 +59,13 @@ class Interface():
         params = Params()
         self.inp_shapes = [type.get_shape(add_batch=True) for type in lhs]
         self.out_shapes = [type.get_shape(add_batch=True) for type in rhs]
-        # output_args = {'batch_norm_update_averages' : True, 'batch_norm_use_averages' : True}
-        output_args = {'deterministic' : True}
-        outputs, params = func_space(*self.inputs, output_args = output_args, params = params, inp_shapes = self.inp_shapes, out_shapes = self.out_shapes, **self.func_space_kwargs)
+        # output_args = {'batch_norm_update_averages' : True,
+        #                'batch_norm_use_averages' : True}
+        output_args = {'deterministic': True}
+        outputs, params = func_space(*self.inputs, output_args=output_args,
+                                     params=params, inp_shapes=self.inp_shapes,
+                                     out_shapes=self.out_shapes,
+                                     **self.func_space_kwargs)
         params.lock()
         self.params = params
         self.outputs = outputs
@@ -92,9 +99,10 @@ class Interface():
         np.savez_compressed(fname, *param_values)
 
     def compile(self):
-        print("Compiling interface")
+        print("Compiling func")
         call_fn = function(self.inputs, self.outputs)
         return call_fn
+
 
 class ForAllVar():
     "Universally quantified variable"
@@ -102,26 +110,31 @@ class ForAllVar():
         self.type = type
         self.input_var = type.tensor(add_batch=True)
 
+
 class Axiom():
     def __init__(self, lhs, rhs, name=''):
         assert len(lhs) == len(rhs)
         self.lhs = lhs
         self.rhs = rhs
 
-    def get_losses(self, dist = mse):
+    def get_losses(self, dist=mse):
+        print("lhs", self.lhs)
+        print("rhs", self.rhs)
         losses = [dist(self.lhs[i], self.rhs[i]) for i in range(len(self.lhs))]
         return losses
 
+
 class BoundAxiom():
     "Constraints a type to be within specifiec bounds"
-    def __init__(self, type, name = 'bound_loss'):
+    def __init__(self, type, name='bound_loss'):
         self.input_var = type
 
     def get_losses(self):
         return [bound_loss(self.input_var).mean()]
 
+
 class Constant():
-    def __init__(self, type, spec=lasagne.init.GlorotUniform(), name = 'C'):
+    def __init__(self, type, spec=lasagne.init.GlorotUniform(), name='C'):
         self.type = type
         shape = type.get_shape(add_batch=True, batch_size=1)
         arr = spec(shape)
@@ -129,10 +142,12 @@ class Constant():
         assert arr.shape == shape
         broadcastable = (True,) + (False,) * (len(shape) - 1)
         # broadcastable = None
-        self.input_var = theano.shared(arr, name=name, broadcastable=broadcastable)
+        self.input_var = theano.shared(arr, name=name,
+                                       broadcastable=broadcastable)
 
     def get_params(self, **tags):
         return [self.input_var]
+
 
 class Params():
     def __init__(self):
@@ -151,11 +166,11 @@ class Params():
         return self.get(key, default_value)
 
     def get(self, key, default_value):
-        if self.params.has_key(key):
+        if key in self.params:
             # print("Retrieving Key")
             return self.params[key]
         else:
-            assert not self.is_locked, "Attempted to create parameter from locked params"
+            assert not self.is_locked, "Cant create param when locked"
             # print("Creating new key")
             param = default_value
             self.params[key] = param
@@ -165,7 +180,7 @@ class Params():
         if self.is_locked:
             # print("Not Setting, locked")
             return
-        if self.params.has_key(key):
+        if key in self.params:
             self.params[key] = value
         else:
             print("Setting value before generated")
@@ -190,91 +205,23 @@ class Params():
 
         return lasagne.utils.collect_shared_vars(result)
 
+
 class AbstractDataType():
-    def __init__(self, interfaces, constants, forallvars, axioms, name = ''):
-        self.interfaces = interfaces
-        self.constants = constants
+    def __init__(self, funcs, consts, forallvars, axioms, name=''):
+        self.funcs = funcs
+        self.consts = consts
         self.forallvars = forallvars
         self.axioms = axioms
         self.name = name
 
+
 class ProbDataType():
-    """ A probabilistic data type gives a function (space) to each interfaces,
+    """ A probabilistic data type gives a function (space) to each funcs,
         a value to each constant and a random variable to each diti=rbution"""
-    def __init__(self, adt, train_fn, call_fns, generators, gen_to_inputs, intermediates):
+    def __init__(self, adt, train_fn, call_fns, generators, gen_to_inputs,
+                 train_outs):
         self.adt = adt
         self.train_fn = train_fn
         self.call_fns = call_fns
         self.generators = generators
         self.gen_to_inputs = gen_to_inputs
-
-def get_updates(loss, params, options):
-    updates = {}
-    print("Params",params)
-    if options['update'] == 'momentum':
-        updates = lasagne.updates.momentum(loss, params, learning_rate=options['learning_rate'], momentum=options['momentum'])
-    elif options['update'] == 'adam':
-        updates = lasagne.updates.adam(loss, params, learning_rate=options['learning_rate'])
-    elif options['update'] == 'rmsprop':
-        updates = lasagne.updates.rmsprop(loss, params, learning_rate=options['learning_rate'])
-    return updates
-
-def get_losses(axioms):
-    losses = []
-    for axiom in axioms:
-        for loss in axiom.get_losses():
-            losses.append(loss)
-    return losses
-
-def get_params(interfaces, options, **tags):
-    params = []
-    for interface in interfaces:
-        for param in interface.get_params(**tags):
-            params.append(param)
-
-    return params
-
-def compile_fns(interfaces, constants, forallvars, axioms, intermediates, options):
-    print("Compiling training fn...")
-    losses = get_losses(axioms)
-    interface_params = get_params(interfaces, options, trainable=True)
-    constant_params = get_params(constants, options)
-    params = interface_params + constant_params
-    loss = sum(losses)
-    outputs = intermediates + losses
-    updates = get_updates(loss, params, options)
-    train_fn = function([forallvar.input_var for forallvar in forallvars], outputs, updates = updates)
-    # Compile the interface for use
-    if options['compile_fns']:
-        print("Compiling interface fns...")
-        call_fns = [interface.compile() for interface in interfaces]
-    else:
-        call_fns = []
-    #FIXME Trainable=true, deterministic = true/false
-    return train_fn, call_fns
-
-def train(train_fn, generators, gen_to_inputs = identity, nintermediates,
-          num_epochs = 1000, summary_gap = 100):
-    """One epoch is one pass through the data set"""
-    print("Starting training...")
-    for epoch in range(num_epochs):
-        train_err = 0
-        train_batches = 0
-        start_time = time.time()
-        intermediates = None
-        [gen.next() for gen in generators]
-        for i in range(summary_gap):
-            gens = [gen.send(intermediates) for gen in generators]
-            inputs = gen_to_inputs(gens)
-            intermediates_losses = train_fn(*inputs)
-            intermediates = intermediates_losses[0:nintermediates]
-            losses = intermediates_losses[nintermediates:]
-            print("epoch: ", epoch, "losses: ", losses)
-            train_err += losses[0]
-            train_batches += 1
-            gens = [gen.next() for gen in generators]
-        print("epoch: ", epoch, " Total loss per epoch: ", train_err)
-
-def train_pbt(pbt, **kwargs):
-    train(pbt.train_fn, pbt.generators, pbt.gen_to_inputs, len(pbt.intermediates),
-          **kwargs)
