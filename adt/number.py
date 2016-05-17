@@ -21,8 +21,7 @@ def number_adt(options, niters=3, number_shape=(5,), batch_size=64,
     mul = Interface([Number, Number], [Number], res_net, **mul_args)
     encode = Interface([BinInteger], [Number], res_net, **mul_args)
     decode = Interface([Number], [BinInteger], res_net, **mul_args)
-    # funcs = [encode, decode, succ, add, mul]
-    funcs = [encode, decode]
+    funcs = [encode, decode, succ, add, mul]
 
     # Vars
     # a = ForAllVar(Number)
@@ -31,7 +30,6 @@ def number_adt(options, niters=3, number_shape=(5,), batch_size=64,
     bj = ForAllVar(BinInteger)
 
     forallvars = [bi, bj]
-    forallvars = [bi]
 
     # Constants
     zero = Constant(Number)
@@ -46,25 +44,24 @@ def number_adt(options, niters=3, number_shape=(5,), batch_size=64,
     # axiom_zero = Axiom(decode(zero_batch), (0,))
 
     axiom_ed = Axiom(decode(encoded1), (bi.input_var,))
-    axioms = [axiom_ed]
-    # (succ_encoded,) = succ(encoded1)
-    # axiom_succ_ed = Axiom(decode(succ_encoded), (bi.input_var + 1,))
-    #
-    # encode_axioms = [axiom_ed, axiom_succ_ed]
-    #
-    # a = encoded1
-    # b = encoded2
-    #
-    # (succ_b,) = succ(b)
-    # mul_a_succ_b = mul(a, succ_b)
-    # mul_axiom2_rhs = mul(a, b) + [a]
-    #
-    # add_axiom1 = Axiom(add(a, zero_batch), (a,))
-    # add_axiom2 = Axiom(add(a, succ_b), succ(*add(a, b)))
-    # mul_axiom1 = Axiom(mul(a, zero_batch), (zero_batch,))
-    # mul_axiom2 = Axiom(mul(a, succ_b), add(*mul_axiom2_rhs))
-    # arith_axioms = [add_axiom1, add_axiom2, mul_axiom1, mul_axiom2]
-    # axioms = encode_axioms + arith_axioms
+    (succ_encoded,) = succ(encoded1)
+    axiom_succ_ed = Axiom(decode(succ_encoded), (bi.input_var + 1,))
+
+    encode_axioms = [axiom_ed, axiom_succ_ed]
+
+    a = encoded1
+    b = encoded2
+
+    (succ_b,) = succ(b)
+    mul_a_succ_b = mul(a, succ_b)
+    mul_axiom2_rhs = mul(a, b) + [a]
+
+    add_axiom1 = Axiom(add(a, zero_batch), (a,))
+    add_axiom2 = Axiom(add(a, succ_b), succ(*add(a, b)))
+    mul_axiom1 = Axiom(mul(a, zero_batch), (zero_batch,))
+    mul_axiom2 = Axiom(mul(a, succ_b), add(*mul_axiom2_rhs))
+    arith_axioms = [add_axiom1, add_axiom2, mul_axiom1, mul_axiom2]
+    axioms = encode_axioms + arith_axioms
 
     # generators
     def realistic_nums(*shape):
@@ -73,7 +70,7 @@ def number_adt(options, niters=3, number_shape=(5,), batch_size=64,
         #               np.random.randint(-1, 10, shape))
 
     generators = [infinite_samples(realistic_nums, batch_size, (1,))
-                  for i in range(1)]
+                  for i in range(2)]
 
     train_outs = []
     gen_to_inputs = identity
@@ -103,8 +100,8 @@ def main(argv):
     options['compile_fns'] = True
     options['save_params'] = True
     options['train'] = True
-    options['nblocks'] = 1
-    options['block_size'] = 1
+    options['nblocks'] = 2
+    options['block_size'] = 2
     options['batch_size'] = 1024
     options['nfilters'] = 24
     options['layer_width'] = 50
