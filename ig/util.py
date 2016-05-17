@@ -1,4 +1,5 @@
 import numpy as np
+import lasagne
 
 
 def stringy(ls):

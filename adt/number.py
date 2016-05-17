@@ -27,17 +27,18 @@ def number_adt(options, niters=3, number_shape=(5,), batch_size=64,
 
     # Constants
     zero = Constant(Number)
+    zero_batch = repeat_to_batch(zero.input_var, batch_size)
     consts = [zero]
 
     # axioms
     succ_b = succ(b)
-    add_a_zero = add(a, zero)
+    add_a_zero = add(a, zero_batch)
     mul_a_succ_b = mul(a, *succ_b)
     mul_axiom2_rhs = mul(a, b) + [a.input_var]
 
-    add_axiom1 = Axiom(add(a, zero), (a.input_var,))
+    add_axiom1 = Axiom(add(a, zero_batch), (a.input_var,))
     add_axiom2 = Axiom(add(a, *succ_b), succ(*add(a, b)))
-    mul_axiom1 = Axiom(mul(a, zero), (zero.input_var,))
+    mul_axiom1 = Axiom(mul(a, zero_batch), (zero_batch,))
     mul_axiom2 = Axiom(mul(a, *succ_b), add(*mul_axiom2_rhs))
     axioms = [add_axiom1, add_axiom2, mul_axiom1, mul_axiom2]
 
@@ -66,27 +67,27 @@ def main(argv):
     global funcs, consts, forallvars, axioms, generators, train_fn, call_fns
     global push, pop
     global X_train
-    global adt, pbt
+    global adt, pdt
 
     options = handle_args(argv)
     options['num_epochs'] = 100
     options['compile_fns'] = True
     options['save_params'] = True
     options['train'] = True
-    options['nblocks'] = 1
-    options['block_size'] = 1
+    options['nblocks'] = 2
+    options['block_size'] = 2
     options['batch_size'] = 256
     options['nfilters'] = 24
     options['layer_width'] = 101
     options['adt'] = 'number'
 
     sfx = gen_sfx_key(('adt', 'nblocks', 'block_size', 'nfilters'), options)
-    adt, pbt = number_adt(options,
-                          number_shape=(102,),
+    adt, pdt = number_adt(options,
+                          number_shape=(10,),
                           succ_args=options, add_args=options,
                           mul_args=options, batch_size=options['batch_size'])
 
-    load_train_save(options, funcs, train_pbt, sfx)
+    load_train_save(options, adt.funcs, pdt, sfx)
 
 if __name__ == "__main__":
     main(sys.argv[1:])

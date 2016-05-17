@@ -225,3 +225,4 @@ class ProbDataType():
         self.call_fns = call_fns
         self.generators = generators
         self.gen_to_inputs = gen_to_inputs
+        self.train_outs = train_outs

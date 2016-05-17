@@ -1,5 +1,6 @@
 import lasagne
 from theano import function
+import time
 
 class TrainParams():
     def __init__(self, adt, train_fn, call_fns, generators, gen_to_inputs,

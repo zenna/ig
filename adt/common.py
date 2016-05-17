@@ -1,4 +1,7 @@
 from ig.util import *
+from train import *
+import theano.tensor as T
+
 
 def gen_sfx_key(keys, options):
     sfx_dict = {}
@@ -9,7 +12,10 @@ def gen_sfx_key(keys, options):
     return sfx
 
 
-def load_train_save(options, funcs, train_pbt, sfx):
+def repeat_to_batch(x, batch_size, tnp=T):
+    return tnp.repeat(x, batch_size, axis=0)
+
+def load_train_save(options, funcs, pbt, sfx):
     if options['load_params'] is True:
         for i in range(len(funcs)):
             funcs[i].load_params_fname("%s_stack_interface_%s.npz" % (sfx, i))
