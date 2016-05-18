@@ -16,12 +16,12 @@ def number_adt(options, niters=3, number_shape=(5,), batch_size=64,
     BinInteger = Type((1,))  # A python integer
 
     # Interface
-    succ = Interface([Number], [Number], res_net, **succ_args)
-    add = Interface([Number, Number], [Number], res_net, **add_args)
-    mul = Interface([Number, Number], [Number], res_net, **mul_args)
-    encode = Interface([BinInteger], [Number], res_net, **mul_args)
-    decode = Interface([Number], [BinInteger], res_net, **mul_args)
-    funcs = [encode, decode, succ, add, mul]
+    succ = Interface([Number], [Number], res_net, 'succ', **succ_args)
+    add = Interface([Number, Number], [Number], res_net, 'add', **add_args)
+    mul = Interface([Number, Number], [Number], res_net, 'mul', **mul_args)
+    encode = Interface([BinInteger], [Number], res_net, 'encode', **mul_args)
+    decode = Interface([Number], [BinInteger], res_net, 'decode', **mul_args)
+    funcs = [succ, add, mul, encode, decode]
 
     # Vars
     # a = ForAllVar(Number)
@@ -35,7 +35,6 @@ def number_adt(options, niters=3, number_shape=(5,), batch_size=64,
     zero = Constant(Number)
     zero_batch = repeat_to_batch(zero.input_var, batch_size)
     consts = [zero]
-    consts = []
 
     # axioms
     (encoded1,) = encode(bi)
@@ -96,12 +95,12 @@ def main(argv):
     global adt, pdt
 
     options = handle_args(argv)
-    options['num_epochs'] = 100
+    options['num_epochs'] = 1
     options['compile_fns'] = True
     options['save_params'] = True
     options['train'] = True
-    options['nblocks'] = 5
-    options['block_size'] = 2
+    options['nblocks'] = 1
+    options['block_size'] = 1
     options['batch_size'] = 1024
     options['nfilters'] = 24
     options['layer_width'] = 50
@@ -113,7 +112,7 @@ def main(argv):
                           succ_args=options, add_args=options,
                           mul_args=options, batch_size=options['batch_size'])
 
-    load_train_save(options, adt.funcs, pdt, sfx)
+    load_train_save(options, adt, pdt, sfx)
 
 if __name__ == "__main__":
     main(sys.argv[1:])

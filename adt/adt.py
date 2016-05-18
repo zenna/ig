@@ -49,7 +49,7 @@ class Type():
 
 
 class Interface():
-    def __init__(self, lhs, rhs, func_space, **func_space_kwargs):
+    def __init__(self, lhs, rhs, func_space, name='', **func_space_kwargs):
         self.lhs = lhs
         self.rhs = rhs
         self.func_space = func_space
@@ -59,6 +59,7 @@ class Interface():
         params = Params()
         self.inp_shapes = [type.get_shape(add_batch=True) for type in lhs]
         self.out_shapes = [type.get_shape(add_batch=True) for type in rhs]
+        self.name = name
         # output_args = {'batch_norm_update_averages' : True,
         #                'batch_norm_use_averages' : True}
         output_args = {'deterministic': True}
@@ -75,7 +76,7 @@ class Interface():
         print("Calling", args)
         # shapes = [type.get_shape(add_batch=True) for type in self.lhs]
         # output_args = {'batch_norm_update_averages' : True, 'batch_norm_use_averages' : False}
-        output_args = {'deterministic' : True}
+        output_args = {'deterministic': False}
         outputs, params = self.func_space(*args, output_args = output_args, params = self.params, inp_shapes = self.inp_shapes, out_shapes = self.out_shapes, **self.func_space_kwargs)
         return outputs
 
@@ -100,7 +101,7 @@ class Interface():
 
     def compile(self):
         print("Compiling func")
-        call_fn = function(self.inputs, self.outputs)
+        call_fn = function(self.inputs, self.outputs, name=self.name)
         return call_fn
 
 
@@ -147,6 +148,19 @@ class Constant():
 
     def get_params(self, **tags):
         return [self.input_var]
+
+    def load_params(self, param_value):
+        assert input_value.shape == param_value.shape
+        self.input_var.set_value(param_value)
+
+    def load_params_fname(self, fname):
+        params_file = np.load(fname)
+        param_values = npz_to_array(params_file)
+        return self.load_params(param_values[0])
+
+    def save_params(self, fname):
+        param_value = self.input_var.get_value()
+        np.savez_compressed(fname, param_value)
 
 
 class Params():
@@ -213,6 +227,18 @@ class AbstractDataType():
         self.forallvars = forallvars
         self.axioms = axioms
         self.name = name
+
+    def load_params(self, sfx):
+        for i in range(len(self.funcs)):
+            self.funcs[i].load_params_fname("%s_interface_%s.npz" % (sfx, i))
+        for const in range(len(self.consts)):
+            self.consts[i].load_params_fname("%s_constant_%s" % (sfx, i))
+
+    def save_params(self, sfx):
+        for i in range(len(self.funcs)):
+            self.funcs[i].save_params("%s_interface_%s" % (sfx, i))
+        for i in range(len(self.consts)):
+            self.consts[i].save_params("%s_constant_%s" % (sfx, i))
 
 
 class ProbDataType():

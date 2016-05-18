@@ -58,29 +58,27 @@ def compile_fns(funcs, consts, forallvars, axioms, train_outs, options):
     return train_fn, call_fns
 
 
-def train(train_fn, generators, gen_to_inputs, ntrain_outs,
-          num_epochs=1000, summary_gap=100):
+def train(adt, pdt, num_epochs=1000, summary_gap=100, save_every=10, sfx=''):
     """One epoch is one pass through the data set"""
     print("Starting training...")
     for epoch in range(num_epochs):
         train_err = 0
         train_batches = 0
         start_time = time.time()
+        ntrain_outs = len(pdt.train_outs)
         train_outs = None
-        [gen.next() for gen in generators]
+        [gen.next() for gen in pdt.generators]
         for i in range(summary_gap):
-            gens = [gen.send(train_outs) for gen in generators]
-            inputs = gen_to_inputs(gens)
-            train_outs_losses = train_fn(*inputs)
+            gens = [gen.send(train_outs) for gen in pdt.generators]
+            inputs = pdt.gen_to_inputs(gens)
+            train_outs_losses = pdt.train_fn(*inputs)
             train_outs = train_outs_losses[0:ntrain_outs]
             losses = train_outs_losses[ntrain_outs:]
             print("epoch: ", epoch, "losses: ", losses)
             train_err += losses[0]
             train_batches += 1
-            gens = [gen.next() for gen in generators]
+            gens = [gen.next() for gen in pdt.generators]
+            if i % save_every == 0:
+                stamped_sfx = str(time.time()) + "_" + sfx
+                adt.save_params(stamped_sfx)
         print("epoch: ", epoch, " Total loss per epoch: ", train_err)
-
-
-def train_pbt(pbt, **kwargs):
-    train(pbt.train_fn, pbt.generators, pbt.gen_to_inputs, len(pbt.train_outs),
-          **kwargs)
