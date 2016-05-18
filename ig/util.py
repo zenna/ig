@@ -100,29 +100,8 @@ def infinite_samples(sampler, batchsize, shape):
         to_sample_shape = (batchsize,)+shape
         yield lasagne.utils.floatX(sampler(*to_sample_shape))
 
-# def infinite_batches(inputs, batchsize, f=identity, shuffle=False):
-#     start_idx = 0
-#     nelements = len(inputs)
-#     indices = np.arange(nelements)
-#     if shuffle:
-#         indices = np.arange(len(inputs))
-#         np.random.shuffle(indices)
-#     while True:
-#         end_idx = start_idx + batchsize
-#         if end_idx > nelements:
-#             diff = end_idx - nelements
-#             excerpt = np.concatenate([indices[start_idx:nelements], indices[0:diff]])
-#             start_idx = diff
-#             if shuffle:
-#                 indices = np.arange(len(inputs))
-#                 np.random.shuffle(indices)
-#         else:
-#             excerpt = indices[start_idx:start_idx + batchsize]
-#             start_idx = start_idx +     batchsize
-#         yield f(inputs[excerpt])
 
-
-def infinite_batches(inputs, batchsize, f, shuffle=False):
+def infinite_batches(inputs, batchsize, f=identity, shuffle=False):
     start_idx = 0
     nelements = len(inputs)
     indices = np.arange(nelements)
@@ -130,12 +109,10 @@ def infinite_batches(inputs, batchsize, f, shuffle=False):
         indices = np.arange(len(inputs))
         np.random.shuffle(indices)
     while True:
-        data = yield
         end_idx = start_idx + batchsize
         if end_idx > nelements:
             diff = end_idx - nelements
-            excerpt = np.concatenate([indices[start_idx:nelements],
-                                      indices[0:diff]])
+            excerpt = np.concatenate([indices[start_idx:nelements], indices[0:diff]])
             start_idx = diff
             if shuffle:
                 indices = np.arange(len(inputs))
@@ -143,7 +120,31 @@ def infinite_batches(inputs, batchsize, f, shuffle=False):
         else:
             excerpt = indices[start_idx:start_idx + batchsize]
             start_idx = start_idx + batchsize
-        yield f(inputs[excerpt], data)
+        yield f(inputs[excerpt])
+
+#
+# def infinite_batches(inputs, batchsize, f, shuffle=False):
+#     start_idx = 0
+#     nelements = len(inputs)
+#     indices = np.arange(nelements)
+#     if shuffle:
+#         indices = np.arange(len(inputs))
+#         np.random.shuffle(indices)
+#     while True:
+#         data = yield
+#         end_idx = start_idx + batchsize
+#         if end_idx > nelements:
+#             diff = end_idx - nelements
+#             excerpt = np.concatenate([indices[start_idx:nelements],
+#                                       indices[0:diff]])
+#             start_idx = diff
+#             if shuffle:
+#                 indices = np.arange(len(inputs))
+#                 np.random.shuffle(indices)
+#         else:
+#             excerpt = indices[start_idx:start_idx + batchsize]
+#             start_idx = start_idx + batchsize
+#         yield f(inputs[excerpt], data)
 
 
 def constant_batches(x, f):

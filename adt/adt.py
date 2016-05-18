@@ -62,7 +62,7 @@ class Interface():
         self.name = name
         # output_args = {'batch_norm_update_averages' : True,
         #                'batch_norm_use_averages' : True}
-        output_args = {'deterministic': True}
+        output_args = {'deterministic': False}
         outputs, params = func_space(*self.inputs, output_args=output_args,
                                      params=params, inp_shapes=self.inp_shapes,
                                      out_shapes=self.out_shapes,

@@ -26,6 +26,3 @@ def load_train_save(options, adt, pbt, sfx, save_dir):
     if options['train'] is True:
         train(adt, pbt, num_epochs=options['num_epochs'],
               sfx=sfx, save_dir=save_dir)
-
-    if options['save_params'] is True:
-        adt.save_params(sfx)

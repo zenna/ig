@@ -84,7 +84,10 @@ def train(adt, pdt, num_epochs=1000, summary_gap=100, save_every=10, sfx='',
             train_batches += 1
             gens = [gen.next() for gen in pdt.generators]
             if i % save_every == 0:
-                stamped_sfx = "epoch_%s_run_%s_%s" % (epoch, i, sfx)
-                path = os.path.join(save_dir, stamped_sfx)
+                sfx2 = "epoch_%s_run_%sloss_%s" % (epoch, i, str(np.sum(losses)))
+                path = os.path.join(save_dir, sfx2)
                 adt.save_params(path)
         print("epoch: ", epoch, " Total loss per epoch: ", train_err)
+
+    path = os.path.join(save_dir, "final" + sfx)
+    adt.save_params(path)

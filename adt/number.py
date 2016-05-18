@@ -87,9 +87,7 @@ def main(argv):
     # Args
     global options
     global test_files, train_files
-    global net, output_layer, cost_f, cost_f_dict, val_f, call_f, call_f_dict
     global views, outputs, net
-    global funcs, consts, forallvars, axioms, generators, train_fn, call_fns
     global push, pop
     global X_train
     global adt, pdt

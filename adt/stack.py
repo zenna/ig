@@ -1,172 +1,175 @@
-
-# abstract data types
-
-from __future__ import print_function
-
-import time
-
 import theano
-import theano.tensor as T
-import lasagne
-from lasagne.layers import InputLayer
-from lasagne.layers import DenseLayer
-from lasagne.layers import NonlinearityLayer
-from lasagne.layers import ConcatLayer
-from lasagne.layers import DropoutLayer
-from lasagne.layers import Pool2DLayer as PoolLayer
-from lasagne.layers import Conv1DLayer
-from lasagne.layers import batch_norm
-from lasagne.utils import floatX
-
-# def batch_norm(x): return x
-
-
-# from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
-from lasagne.nonlinearities import softmax, rectify, sigmoid
-from theano import shared
-from theano import function
-from theano import config
-
-import numpy as np
+from adt import *
 from mnist import *
+from ig.util import *
+from train import *
+from common import *
+
+# theano.config.optimizer = 'None'
+theano.config.optimizer = 'fast_compile'
+
+def stack_adt(train_data, options, stack_shape=(1, 28, 28), push_args={},
+              pop_args={}, item_shape=(1, 28, 28), batch_size=512, nitems=3):
+    # Types
+    Stack = Type(stack_shape)
+    Item = Type(item_shape)
+
+    # Interface
+    push = Interface([Stack, Item], [Stack], conv_res_net, width=28, height=28,
+                     **push_args)
+    pop = Interface([Stack], [Stack, Item], conv_res_net, width=28, height=28,
+                    **pop_args)
+    funcs = [push, pop]
+
+    # train_outs
+    train_outs = []
+    gen_to_inputs = identity
+
+    # Constants
+    empty_stack = Constant(Stack)
+    consts = [empty_stack]
+
+    # Vars
+    # stack1 = ForAllVar(Stack)
+    items = [ForAllVar(Item) for i in range(nitems)]
+    forallvars = items
+
+    # Axioms
+    axioms = []
+    batch_empty_stack = repeat_to_batch(empty_stack.input_var, batch_size)
+    stack = batch_empty_stack
+    for i in range(nitems):
+        (stack,) = push(stack, items[i].input_var)
+        pop_stack = stack
+        for j in range(i, -1, -1):
+            (pop_stack, pop_item) = pop(pop_stack)
+            axiom = Axiom((pop_item,), (items[j].input_var,))
+            axioms.append(axiom)
+
+    # Generators
+    generators = [infinite_batches(train_data, batch_size, shuffle=True)
+                  for i in range(nitems)]
+    train_fn, call_fns = compile_fns(funcs, consts, forallvars, axioms,
+                                     train_outs, options)
+    stack_adt = AbstractDataType(funcs, consts, forallvars, axioms,
+                                 name='stack')
+    stack_pdt = ProbDataType(stack_adt, train_fn, call_fns, generators,
+                             gen_to_inputs, train_outs)
+    return stack_adt, stack_pdt
 
 
-config.optimizer = 'None'
-# config.optimizer = 'fast_compile'
+# Validation
+def validate_what(data, batch_size, nitems, es, push, pop):
+    datalen = data.shape[0]
+    es = np.repeat(es, batch_size, axis=0)
+    data_indcs = np.random.randint(0, datalen-batch_size, nitems)
+    items = [data[data_indcs[i]:data_indcs[i]+batch_size]
+             for i in range(nitems)]
+    losses = []
+    stack = es
+    for i in range(nitems):
+        (stack,) = push(stack, items[i])
+        pop_stack = stack
+        for j in range(i, -1, -1):
+            (pop_stack, pop_item) = pop(pop_stack)
+            loss = mse(pop_item, items[j], tnp=np)
+            losses.append(loss)
+    print(losses)
 
-def sigmoid(y, tnp = T):
-  return tnp.minimum(tnp.maximum(0, y),1)
+def validate_3stack_img(item1, item2, item3, es, push, pop, lb, ub):
+    (pushed_stack,) = push(es, item1)
+    (popped_stack, popped_item) = pop(pushed_stack)
+    loss1 = mse(popped_stack, es, tnp = np)
+    loss2 = mse(popped_item, item1, tnp = np)
 
-def bound_loss(x, tnp = T) :
-  eps = 1e-9
-  loss = tnp.maximum(tnp.maximum(eps,x-1), tnp.maximum(eps,-x)) + eps
-  return tnp.maximum(loss, eps) + eps
+    (p_pushed_stack,) = push(pushed_stack, item2)
+    (p_popped_stack, p_popped_item) = pop(p_pushed_stack)
+    loss3 = mse(p_popped_stack, pushed_stack, tnp = np)
+    loss4 = mse(p_popped_item, item2, tnp = np)
 
-def mse(a, b):
-    eps = 1e-9
-    return (T.maximum(eps, (a - b)**2)).mean()
+    (p_p_pushed_stack,) = push(p_pushed_stack, item3)
+    (p_p_popped_stack, p_p_popped_item) = pop(p_p_pushed_stack)
+    loss5 = mse(p_p_popped_stack, p_pushed_stack, tnp = np)
+    loss6 = mse(p_p_popped_item, item3, tnp = np)
 
-# Square error
-def dist(a, b):
-    eps = 1e-9
-    return T.sum(T.maximum(eps, (a - b)**2))
-
-# Push(Stack, Item) -> Stack
-def push(input_stack, input_item, stack_size, n_blocks = 2, block_size = 2):
-  push_net = {}
-  push_net['combine'] = prev_layer = ConcatLayer([input_stack, input_item])
-  layer_width = stack_size
-  print("push layer_width", layer_width)
-  wx = DenseLayer(prev_layer, layer_width, nonlinearity = rectify, W=lasagne.init.HeNormal(gain='relu'))
-  for j in range(n_blocks):
-    for i in range(block_size):
-      push_net['res2d%s_%s' % (j,i)] = prev_layer = batch_norm(DenseLayer(prev_layer, layer_width,
-            nonlinearity = rectify, W=lasagne.init.HeNormal(gain='relu')))
-    push_net['block%s' % j] = prev_layer = wx = lasagne.layers.ElemwiseSumLayer([prev_layer, wx])
-
-  # push_net['final'] = prev_layer = wx = lasagne.layers.NonlinearityLayer(prev_layer, nonlinearity=rectify)
-  return push_net, wx
-
-
-# Push(Stack, Item) -> Stack
-def pop(input_stack, stack_size, item_size, n_blocks = 2, block_size = 2):
-  pop_net = {}
-  prev_layer = x = input_stack
-  layer_width = stack_size+item_size
-  print("pop layer_width", layer_width)
-  wx = DenseLayer(x, layer_width, nonlinearity = rectify, W=lasagne.init.HeNormal(gain='relu'))
-
-  for j in range(n_blocks):
-    for i in range(block_size):
-      pop_net['res2d%s_%s' % (j,i)] = prev_layer = batch_norm(DenseLayer(prev_layer, layer_width,
-            nonlinearity = rectify, W=lasagne.init.HeNormal(gain='relu')))
-    pop_net['block%s' % j] = prev_layer = wx = lasagne.layers.ElemwiseSumLayer([prev_layer, wx])
-
-  # pop_net['final'] = prev_layer = wx = lasagne.layers.NonlinearityLayer(prev_layer, nonlinearity=rectify)
-  return pop_net, wx
-
-def main(X_train, stack_size = 1, nbatch = 256, item_size = 28*28, num_epochs = 1000):
-    # empty_stack = shared(np.random.rand(stack_size))
-    global params, push_net, push_net_last_layer, push_func, pop_net, pop_net_last_layer
-    input_stack = InputLayer((nbatch, stack_size))
-    input_item = InputLayer((nbatch, item_size))
-    ## Push
-    push_net, push_net_last_layer = push(input_stack, input_item, stack_size)
-    push_net_op = lasagne.layers.get_output(push_net_last_layer)
-    push_func = function([input_stack.input_var, input_item.input_var], push_net_op)
-
-    ## Specification
-    ## =============
-
-    # is_empty(empty_stack) = true
-    # is_empty_loss = dist(is_empty(empty_stack), empty_stack)
-
-    ## Axiom 2: Forall stacks, items, pop(push(stack, item)) = stack, items
-    pop_net, pop_net_last_layer = pop(push_net_last_layer, stack_size, item_size)
-    pop_net_op = lasagne.layers.get_output(pop_net_last_layer)
-    pop_op_stack = pop_net_op[:, 0:stack_size]
-    pop_op_item = pop_net_op[:, stack_size:]
-
-    ax2_loss1 = mse(pop_op_stack, input_stack.input_var)
-    ax2_loss2 = mse(pop_op_item, input_item.input_var)
-    # loss = ax2_loss1
-    ## Axiom: L
-
-    # Boundary losses
-    b_loss1 = bound_loss(push_net_op, tnp=T).mean()
-    b_loss2 = bound_loss(pop_op_stack, tnp=T).mean()
-
-    loss = ax2_loss2 + ax2_loss1 # + b_loss1 + b_loss2
-    params =  lasagne.layers.get_all_params(pop_net_last_layer,  trainable=True)
-    updates = lasagne.updates.adam(loss, params, learning_rate = 0.00005)
-    # updates = lasagne.updates.momentum(loss, params, learning_rate = 0.0001)
-    # updates = lasagne.updates.rmsprop(loss, params, learning_rate = 0.001)
-    f_train = function([input_stack.input_var, input_item.input_var], [loss, ax2_loss1, ax2_loss2, b_loss1, b_loss2], updates = updates)
-
-    print("Starting training...")
-    for epoch in range(num_epochs):
-        # In each epoch, we do a full pass over the training data:
-        train_err = 0
-        train_batches = 0
-        start_time = time.time()
-        for batch in iterate_minibatches(X_train, nbatch, shuffle=True):
-            input_item_data = batch#.reshape(nbatch, item_size)
-            input_stack_data = np.array(np.random.rand(nbatch, stack_size), dtype=config.floatX)
-            losses = f_train(input_stack_data, input_item_data)
-            print(losses)
-            train_err += losses[0]
-            train_batches += 1
+    loss = [loss1, loss2, loss3, loss4, loss5, loss6]
+    print(loss)
+    stacks =  [pushed_stack, popped_stack, p_pushed_stack, p_popped_stack, p_p_pushed_stack, p_p_popped_stack]
+    items = [item1, item2, item3, popped_item, p_popped_item, p_p_popped_item]
+    return stacks, items
 
 
-def iterate_minibatches(inputs, batchsize, shuffle=False):
-    if shuffle:
-        indices = np.arange(len(inputs))
-        np.random.shuffle(indices)
-    for start_idx in range(0, len(inputs) - batchsize + 1, batchsize):
-        if shuffle:
-            excerpt = indices[start_idx:start_idx + batchsize]
-        else:
-            excerpt = slice(start_idx, start_idx + batchsize)
-        yield inputs[excerpt]
+def validate_stack_img(imgbatch, stackbatch, push, pop, lb, ub):
+    (new_stack,) = push(stackbatch,imgbatch)
+    (old_new_stack, img) = pop(new_stack)
+    loss1 = mse(old_new_stack, stackbatch, tnp = np)
+    loss2 = mse(img, imgbatch, tnp = np)
+    loss = [loss1, loss2]
+    print(loss)
+    return loss, stackbatch, imgbatch, old_new_stack, img
 
-def testing():
-    ## Testing
-    push_func = function([input_stack.input_var, input_item.input_var], push_net_op)
+def validate_stack(data, push, pop, lb, ub):
+    imgbatch = floatX(data[lb:ub])
+    return validate_stack_img(imgbatch, push, pop, lb, ub)
 
-    op_net_inp, pop_net_last_layer_inp = pop(input_stack)
-    pop_net_op_inp = lasagne.layers.get_output(pop_net_last_layer_inp)
-    pop_op_stack_inp = pop_net_op_inp[:, 0:stack_size]
-    pop_op_item_inp  = pop_net_op_inp[:, stack_size:]
+def whitenoise_trick():
+    new_img = floatX(np.array(np.random.rand(1,1,28,28)*2**8, dtype='int'))/256
+    for i in range(1000):
+        loss, stack, img, new_stack, new_img = validate_stack(new_img, X_train, push, pop, 0, 512)
 
-    pop_param_values = lasagne.layers.get_all_param_values(pop_net_last_layer)
-    npop_parmas = len(lasagne.layers.get_all_params(pop_net_last_layer_inp))
-    pop_inp_param_values = pop_param_values[-npop_parmas:]
-    lasagne.layers.set_all_param_values(pop_net_last_layer_inp, pop_inp_param_values)
-    pop_func = function([input_stack.input_var], [pop_op_stack_inp,pop_op_item_inp])
+def stack_unstack(n, stack, offset=0):
+    lb = 0 + offset
+    ub = 1 + offset
+    imgs = []
+    stacks = []
+    stacks.append(stack)
+    for i in range(n):
+        new_img = floatX(X_train[lb+i:ub+i])
+        imgs.append(new_img)
+        (stack,) = push(stack,new_img)
+        stacks.append(stack)
 
-    ## Testing
-    new_stack_data =  push_func(input_stack_data, input_item_data)
-    shoud_be_old_stack, should_be_old_item = pop_func(new_stack_data)
+    for i in range(n):
+        (stack, old_img) = pop(stack)
+        stacks.append(stack)
+        imgs.append(old_img)
 
-X_train, y_train, X_val, y_val, X_test, y_test = load_dataset()
-main(X_train.reshape(50000,28*28), stack_size = 1000, nbatch = 256, item_size = 28*28)
+    return stacks + imgs
+
+def whitenoise(batch_size):
+    return floatX(np.array(np.random.rand(batch_size,1,28,28)*2**8, dtype='int'))/256
+
+def main(argv):
+    # Args
+    global options
+    global test_files, train_files
+    global views, outputs, net
+    global push, pop
+    global X_train
+    global adt, pdt
+
+    options = handle_args(argv)
+    options['num_epochs'] = 50
+    options['compile_fns'] = True
+    options['save_params'] = True
+    options['train'] = True
+    options['nblocks'] = 1
+    options['block_size'] = 1
+    options['batch_size'] = 512
+    options['nfilters'] = 24
+    options['adt'] = 'stack'
+
+    X_train, y_train, X_val, y_val, X_test, y_test = load_dataset()
+    sfx = gen_sfx_key(('adt', 'nblocks', 'block_size', 'nfilters'), options)
+    print(options)
+    adt, pdt = stack_adt(X_train, options, push_args=options,
+                          pop_args=options, batch_size=options['batch_size'])
+
+    save_dir = mk_dir(sfx)
+    load_train_save(options, adt, pdt, sfx, save_dir)
+    push, pop = pdt.call_fns
+    loss, stack, img, new_stack, new_img = validate_stack_img_rec(new_img, X_train, push, pop, 0, 1)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
