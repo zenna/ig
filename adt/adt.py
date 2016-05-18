@@ -137,11 +137,11 @@ class BoundAxiom():
 class Const():
     def __init__(self, type, spec=lasagne.init.GlorotUniform(), name='C'):
         self.type = type
-        shape = type.get_shape(add_batch=True, batch_size=1)
-        arr = spec(shape)
+        self.shape = type.get_shape(add_batch=True, batch_size=1)
+        arr = spec(self.shape)
         arr = floatX(arr)
-        assert arr.shape == shape
-        broadcastable = (True,) + (False,) * (len(shape) - 1)
+        assert arr.shape == self.shape
+        broadcastable = (True,) + (False,) * (len(self.shape) - 1)
         # broadcastable = None
         self.input_var = theano.shared(arr, name=name,
                                        broadcastable=broadcastable)
@@ -150,7 +150,7 @@ class Const():
         return [self.input_var]
 
     def load_params(self, param_value):
-        assert input_value.shape == param_value.shape
+        assert self.shape == param_value.shape
         self.input_var.set_value(param_value)
 
     def load_params_fname(self, fname):
@@ -231,8 +231,8 @@ class AbstractDataType():
     def load_params(self, sfx):
         for i in range(len(self.funcs)):
             self.funcs[i].load_params_fname("%s_interface_%s.npz" % (sfx, i))
-        for const in range(len(self.consts)):
-            self.consts[i].load_params_fname("%s_constant_%s" % (sfx, i))
+        for i in range(len(self.consts)):
+            self.consts[i].load_params_fname("%s_constant_%s.npz" % (sfx, i))
 
     def save_params(self, sfx):
         for i in range(len(self.funcs)):

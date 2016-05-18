@@ -28,10 +28,11 @@ def parse_template(template):
 
 def load_train_save(options, adt, pbt, sfx, save_dir):
     if options['load_params'] is True:
-        pbt.load_params(sfx)
+        adt.load_params(options['params_file'])
 
     if options['save_params'] is True:
-        adt.save_params(sfx)
+        path = os.path.join(save_dir, "final" + sfx)
+        adt.save_params(path)
 
     if options['train'] is True:
         train(adt, pbt, num_epochs=options['num_epochs'],
