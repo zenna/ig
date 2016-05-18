@@ -45,7 +45,7 @@ def save_dict_csv(fname, params):
     f = open(fname, 'w')
     writer = csv.writer(f)
     for key, value in params.items():
-        writer.writerow([key, value])
+        writer.writerow([str(key), str(value)])
     f.close()
 
 def npz_to_array(npzfile):

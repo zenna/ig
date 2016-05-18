@@ -27,6 +27,9 @@ def parse_template(template):
 
 
 def load_train_save(options, adt, pbt, sfx, save_dir):
+    option_path = os.path.join(save_dir, "options")
+    save_dict_csv(options, options_path)
+
     if options['load_params'] is True:
         adt.load_params(options['params_file'])
 
@@ -36,4 +39,4 @@ def load_train_save(options, adt, pbt, sfx, save_dir):
 
     if options['train'] is True:
         train(adt, pbt, num_epochs=options['num_epochs'],
-              sfx=sfx, save_dir=save_dir)
+              sfx=sfx, save_dir=save_dir, save_every=options['save_every'])

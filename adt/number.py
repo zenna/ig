@@ -93,6 +93,8 @@ def main(argv):
     global push, pop
     global X_train
     global adt, pdt
+    global sfx
+    global save_dir
 
     cust_options = {}
     cust_options['num_epochs'] = (int, 100)
@@ -100,6 +102,7 @@ def main(argv):
     cust_options['save_params'] = (True,)
     cust_options['train'] = (True,)
     cust_options['nblocks'] = (int, 2)
+    cust_options['save_every'] = (int, 100)
     cust_options['block_size'] = (int, 2)
     cust_options['batch_size'] = (int, 1024)
     cust_options['nfilters'] = (int, 24)
