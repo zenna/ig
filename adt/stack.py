@@ -115,7 +115,7 @@ def main(argv):
     cust_options = {}
     cust_options['nitems'] = (int, 3)
     cust_options['width'] = (int, 28)
-    cust_options['height'] = (int 28)
+    cust_options['height'] = (int, 28)
     cust_options['num_epochs'] = (int, 100)
     cust_options['compile_fns'] = (True,)
     cust_options['save_params'] = (True,)
