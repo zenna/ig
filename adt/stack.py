@@ -16,8 +16,8 @@ def stack_adt(train_data, options, stack_shape=(1, 28, 28), push_args={},
     Item = Type(item_shape)
 
     # Interface
-    push = Interface([Stack, Item], [Stack], **push_args)
-    pop = Interface([Stack], [Stack, Item], conv_res_net, **pop_args)
+    push = Interface([Stack, Item], [Stack], 'push', **push_args)
+    pop = Interface([Stack], [Stack, Item], 'pop', **pop_args)
     funcs = [push, pop]
 
     # train_outs
