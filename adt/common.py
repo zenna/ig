@@ -1,4 +1,5 @@
 from ig.util import *
+from ig.io import *
 from train import *
 import theano.tensor as T
 from templates import *
