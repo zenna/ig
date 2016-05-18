@@ -67,6 +67,7 @@ def train(adt, pdt, num_epochs=1000, summary_gap=100, save_every=10, sfx='',
           save_dir="./"):
     """One epoch is one pass through the data set"""
     print("Starting training...")
+    stats = {'loss_vars': [], 'loss_sums': []}
     for epoch in range(num_epochs):
         train_err = 0
         train_batches = 0
@@ -85,7 +86,16 @@ def train(adt, pdt, num_epochs=1000, summary_gap=100, save_every=10, sfx='',
             train_batches += 1
             gens = [gen.next() for gen in pdt.generators]
             if i % save_every == 0:
-                sfx2 = "epoch_%s_run_%sloss_%s" % (epoch, i, str(np.sum(losses)))
+                # Savs statistics
+                loss_sum = np.sum(losses)
+                stats['loss_sums'].append(loss_sum)
+                loss_var = np.var(losses)
+                stats['loss_vars'].append(loss_var)
+                stat_sfx = "epoch_%s_run_%s_stats" % (epoch, i)
+                stats_path = os.path.join(save_dir, stat_sfx)
+                np.savez_compressed(stats_path, **stats)
+                # Save Params
+                sfx2 = "epoch_%s_run_%sloss_%s" % (epoch, i, str(loss_sum))
                 path = os.path.join(save_dir, sfx2)
                 adt.save_params(path)
         print("epoch: ", epoch, " Total loss per epoch: ", train_err)

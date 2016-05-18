@@ -13,7 +13,7 @@ def stringy_dict(d):
     out = ""
     for (key, val) in d.items():
         if val is not None and val is not '':
-            out = out + "%s:%s_" % (str(key), str(val))
+            out = out + "%s_%s__" % (str(key), str(val))
     return out
 
 

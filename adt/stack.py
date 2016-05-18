@@ -17,17 +17,17 @@ def stack_adt(train_data, options, stack_shape=(1, 28, 28), push_args={},
 
     # Interface
     push = Interface([Stack, Item], [Stack], conv_res_net, width=28, height=28,
-                     **push_args)
+                     name='push', **push_args)
     pop = Interface([Stack], [Stack, Item], conv_res_net, width=28, height=28,
-                    **pop_args)
+                    name='pop', **pop_args)
     funcs = [push, pop]
 
     # train_outs
     train_outs = []
     gen_to_inputs = identity
 
-    # Constants
-    empty_stack = Constant(Stack)
+    # Consts
+    empty_stack = Const(Stack)
     consts = [empty_stack]
 
     # Vars
@@ -77,42 +77,6 @@ def validate_what(data, batch_size, nitems, es, push, pop):
             losses.append(loss)
     print(losses)
 
-def validate_3stack_img(item1, item2, item3, es, push, pop, lb, ub):
-    (pushed_stack,) = push(es, item1)
-    (popped_stack, popped_item) = pop(pushed_stack)
-    loss1 = mse(popped_stack, es, tnp = np)
-    loss2 = mse(popped_item, item1, tnp = np)
-
-    (p_pushed_stack,) = push(pushed_stack, item2)
-    (p_popped_stack, p_popped_item) = pop(p_pushed_stack)
-    loss3 = mse(p_popped_stack, pushed_stack, tnp = np)
-    loss4 = mse(p_popped_item, item2, tnp = np)
-
-    (p_p_pushed_stack,) = push(p_pushed_stack, item3)
-    (p_p_popped_stack, p_p_popped_item) = pop(p_p_pushed_stack)
-    loss5 = mse(p_p_popped_stack, p_pushed_stack, tnp = np)
-    loss6 = mse(p_p_popped_item, item3, tnp = np)
-
-    loss = [loss1, loss2, loss3, loss4, loss5, loss6]
-    print(loss)
-    stacks =  [pushed_stack, popped_stack, p_pushed_stack, p_popped_stack, p_p_pushed_stack, p_p_popped_stack]
-    items = [item1, item2, item3, popped_item, p_popped_item, p_p_popped_item]
-    return stacks, items
-
-
-def validate_stack_img(imgbatch, stackbatch, push, pop, lb, ub):
-    (new_stack,) = push(stackbatch,imgbatch)
-    (old_new_stack, img) = pop(new_stack)
-    loss1 = mse(old_new_stack, stackbatch, tnp = np)
-    loss2 = mse(img, imgbatch, tnp = np)
-    loss = [loss1, loss2]
-    print(loss)
-    return loss, stackbatch, imgbatch, old_new_stack, img
-
-def validate_stack(data, push, pop, lb, ub):
-    imgbatch = floatX(data[lb:ub])
-    return validate_stack_img(imgbatch, push, pop, lb, ub)
-
 def whitenoise_trick():
     new_img = floatX(np.array(np.random.rand(1,1,28,28)*2**8, dtype='int'))/256
     for i in range(1000):
@@ -150,22 +114,25 @@ def main(argv):
     global X_train
     global adt, pdt
 
-    options = handle_args(argv)
-    options['num_epochs'] = 50
-    options['compile_fns'] = True
-    options['save_params'] = True
-    options['train'] = True
-    options['nblocks'] = 1
-    options['block_size'] = 2
-    options['batch_size'] = 512
-    options['nfilters'] = 24
-    options['adt'] = 'stack'
+    cust_options = {}
+    cust_options['num_epochs'] = (int, 100)
+    cust_options['compile_fns'] = (True,)
+    cust_options['save_params'] = (True,)
+    cust_options['train'] = (True,)
+    cust_options['nblocks'] = (int, 2)
+    cust_options['block_size'] = (int, 2)
+    cust_options['batch_size'] = (int, 1024)
+    cust_options['nfilters'] = (int, 24)
+    cust_options['layer_width'] = (int, 50)
+    cust_options['adt'] = (str, 'stack')
+    cust_options['template'] = (str, 'res_net')
+    options = handle_args(argv, cust_options)
 
     X_train, y_train, X_val, y_val, X_test, y_test = load_dataset()
     sfx = gen_sfx_key(('adt', 'nblocks', 'block_size', 'nfilters'), options)
     print(options)
     adt, pdt = stack_adt(X_train, options, push_args=options,
-                          pop_args=options, batch_size=options['batch_size'])
+                         pop_args=options, batch_size=options['batch_size'])
 
     save_dir = mk_dir(sfx)
     load_train_save(options, adt, pdt, sfx, save_dir)

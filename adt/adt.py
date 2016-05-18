@@ -49,11 +49,11 @@ class Type():
 
 
 class Interface():
-    def __init__(self, lhs, rhs, func_space, name='', **func_space_kwargs):
+    def __init__(self, lhs, rhs, name='', **template_kwargs):
         self.lhs = lhs
         self.rhs = rhs
-        self.func_space = func_space
-        self.func_space_kwargs = func_space_kwargs
+        self.template = template = template_kwargs['template']
+        self.template_kwargs = template_kwargs
         self.inputs = [type.tensor(add_batch=True) for type in lhs]
         print(self.inputs[0].ndim)
         params = Params()
@@ -63,10 +63,10 @@ class Interface():
         # output_args = {'batch_norm_update_averages' : True,
         #                'batch_norm_use_averages' : True}
         output_args = {'deterministic': False}
-        outputs, params = func_space(*self.inputs, output_args=output_args,
+        outputs, params = template(*self.inputs, output_args=output_args,
                                      params=params, inp_shapes=self.inp_shapes,
                                      out_shapes=self.out_shapes,
-                                     **self.func_space_kwargs)
+                                     **self.template_kwargs)
         params.lock()
         self.params = params
         self.outputs = outputs
@@ -77,7 +77,7 @@ class Interface():
         # shapes = [type.get_shape(add_batch=True) for type in self.lhs]
         # output_args = {'batch_norm_update_averages' : True, 'batch_norm_use_averages' : False}
         output_args = {'deterministic': False}
-        outputs, params = self.func_space(*args, output_args = output_args, params = self.params, inp_shapes = self.inp_shapes, out_shapes = self.out_shapes, **self.func_space_kwargs)
+        outputs, params = self.template(*args, output_args = output_args, params = self.params, inp_shapes = self.inp_shapes, out_shapes = self.out_shapes, **self.template_kwargs)
         return outputs
 
     def get_params(self, **tags):
@@ -134,7 +134,7 @@ class BoundAxiom():
         return [bound_loss(self.input_var).mean()]
 
 
-class Constant():
+class Const():
     def __init__(self, type, spec=lasagne.init.GlorotUniform(), name='C'):
         self.type = type
         shape = type.get_shape(add_batch=True, batch_size=1)

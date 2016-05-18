@@ -1,7 +1,7 @@
 from ig.util import *
 from train import *
 import theano.tensor as T
-
+from templates import *
 
 def gen_sfx_key(keys, options):
     sfx_dict = {}
@@ -14,6 +14,16 @@ def gen_sfx_key(keys, options):
 
 def repeat_to_batch(x, batch_size, tnp=T):
     return tnp.repeat(x, batch_size, axis=0)
+
+
+def parse_template(template):
+    if template == 'res_net':
+        return res_net
+    elif template == 'conv_net':
+        return conv_res_net
+    else:
+        print("Invalid Template ", template)
+        raise ValueError
 
 
 def load_train_save(options, adt, pbt, sfx, save_dir):

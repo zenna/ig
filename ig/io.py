@@ -74,12 +74,18 @@ def get_rnd_voxels(n):
     files = filter(lambda x:x.endswith(".raw") and "train" in x, get_filepaths(os.getenv('HOME') + '/data/ModelNet40'))
     return np.random.choice(files, n, replace=False)
 
-def handle_args(argv):
-    options = {'params_file' : '', 'learning_rate' : 0.1, 'momentum' : 0.9, 'load_params' : False, 'update' : 'momentum',
-               'description' : ''}
-    help_msg = "cold2.py -p <paramfile> -l <learning_rate> -m <momentum> -u <update algorithm> -d <job description>"
+def handle_args(argv, cust_opts):
+    custom_long_opts = ["%s=" % k for k in cust_opts.keys()]
+    cust_double_dash = ["--%s" % k for k in cust_opts.keys()]
+    long_opts = ["params_file=", "learning_rate=", "momentum=", "update=",
+                 "description=", "template="] + custom_long_opts
+    options = {'params_file': '', 'learning_rate': 0.1, 'momentum': 0.9,
+               'load_params': False, 'update': 'momentum', 'description': '',
+               'template': 'res_net'}
+    help_msg = """-p <paramfile> -l <learning_rate> -m <momentum> -u <update algorithm> -d
+                  <job description> -t <template>"""
     try:
-        opts, args = getopt.getopt(argv,"hp:l:m:u:d:",["params_file=, learning_rate=, momentum=, update=, description="])
+        opts, args = getopt.getopt(argv, "hp:l:m:u:d:t:", long_opts)
     except getopt.GetoptError:
         print("invalid options")
         print(help_msg)
@@ -104,6 +110,23 @@ def handle_args(argv):
                 sys.exit()
         elif opt in ("-d", "--description"):
             options['description'] = arg
+        elif opt in ("-t", "--template"):
+            options['template'] = arg
+        elif opt in cust_double_dash:
+            opt_key = opt[2:]  # remove --
+            cust = cust_opts[opt_key]
+            if len(cust) == 1:
+                options[opt_key] = True
+            elif len(cust) == 2:
+                f, default = cust
+                options[opt_key] = f(arg)
+            else:
+                sys.exit()
+
+    # add defaults back
+    for (key, val) in cust_opts.items():
+        if key not in options:
+            options[key] = val[-1]
 
     print(options)
     return options

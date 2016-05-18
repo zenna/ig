@@ -10,17 +10,18 @@ theano.config.optimizer = 'fast_compile'
 
 
 def number_adt(options, niters=3, number_shape=(5,), batch_size=64,
-               succ_args={}, add_args={}, mul_args={}):
+               succ_args={}, add_args={}, mul_args={},
+               encode_args={}, decode_args={}):
     # Types
     Number = Type(number_shape)
     BinInteger = Type((1,))  # A python integer
 
     # Interface
-    succ = Interface([Number], [Number], res_net, 'succ', **succ_args)
-    add = Interface([Number, Number], [Number], res_net, 'add', **add_args)
-    mul = Interface([Number, Number], [Number], res_net, 'mul', **mul_args)
-    encode = Interface([BinInteger], [Number], res_net, 'encode', **mul_args)
-    decode = Interface([Number], [BinInteger], res_net, 'decode', **mul_args)
+    succ = Interface([Number], [Number], 'succ', **succ_args)
+    add = Interface([Number, Number], [Number], 'add', **add_args)
+    mul = Interface([Number, Number], [Number], 'mul', **mul_args)
+    encode = Interface([BinInteger], [Number], 'encode', **encode_args)
+    decode = Interface([Number], [BinInteger], 'decode', **decode_args)
     funcs = [succ, add, mul, encode, decode]
 
     # Vars
@@ -31,8 +32,9 @@ def number_adt(options, niters=3, number_shape=(5,), batch_size=64,
 
     forallvars = [bi, bj]
 
-    # Constants
-    zero = Constant(Number)
+    # Consts
+    zero = Const(Number)
+    print(zero)
     zero_batch = repeat_to_batch(zero.input_var, batch_size)
     consts = [zero]
 
@@ -92,23 +94,29 @@ def main(argv):
     global X_train
     global adt, pdt
 
-    options = handle_args(argv)
-    options['num_epochs'] = 10
-    options['compile_fns'] = True
-    options['save_params'] = True
-    options['train'] = True
-    options['nblocks'] = 2
-    options['block_size'] = 2
-    options['batch_size'] = 1024
-    options['nfilters'] = 24
-    options['layer_width'] = 50
-    options['adt'] = 'number'
+    cust_options = {}
+    cust_options['num_epochs'] = (int, 100)
+    cust_options['compile_fns'] = (True,)
+    cust_options['save_params'] = (True,)
+    cust_options['train'] = (True,)
+    cust_options['nblocks'] = (int, 2)
+    cust_options['block_size'] = (int, 2)
+    cust_options['batch_size'] = (int, 1024)
+    cust_options['nfilters'] = (int, 24)
+    cust_options['layer_width'] = (int, 50)
+    cust_options['adt'] = (str, 'number')
+    cust_options['template'] = (str, 'res_net')
+    options = handle_args(argv, cust_options)
 
-    sfx = gen_sfx_key(('adt', 'nblocks', 'block_size', 'nfilters'), options)
+    sfx = gen_sfx_key(('adt', 'template', 'nblocks', 'block_size', 'nfilters'), options)
+    options['template'] = parse_template(options['template'])
+
     adt, pdt = number_adt(options,
                           number_shape=(50,),
                           succ_args=options, add_args=options,
-                          mul_args=options, batch_size=options['batch_size'])
+                          mul_args=options, encode_args=options,
+                          decode_args=options,
+                          batch_size=options['batch_size'])
 
     save_dir = mk_dir(sfx)
     load_train_save(options, adt, pdt, sfx, save_dir)
