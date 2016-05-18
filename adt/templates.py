@@ -114,7 +114,6 @@ def res_net(*inputs, **kwargs):
   lb = 0
   for i in range(noutputs):
       ub = lb + flat_output_shapes[i]
-      print("lbub", lb," ", ub)
       out = output_product[:, lb:ub]
       rout = out.reshape((out.shape[0],) + (out_shapes[i][1:]))
       outputs.append(rout)

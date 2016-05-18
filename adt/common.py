@@ -28,7 +28,7 @@ def parse_template(template):
 
 
 def load_train_save(options, adt, pbt, sfx, save_dir):
-    option_path = os.path.join(save_dir, "options")
+    options_path = os.path.join(save_dir, "options")
     save_dict_csv(options, options_path)
 
     if options['load_params'] is True:
