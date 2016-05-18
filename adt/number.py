@@ -95,7 +95,7 @@ def main(argv):
     global adt, pdt
 
     options = handle_args(argv)
-    options['num_epochs'] = 1
+    options['num_epochs'] = 10
     options['compile_fns'] = True
     options['save_params'] = True
     options['train'] = True
