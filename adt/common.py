@@ -29,7 +29,7 @@ def parse_template(template):
 
 def load_train_save(options, adt, pbt, sfx, save_dir):
     options_path = os.path.join(save_dir, "options")
-    save_dict_csv(options, options_path)
+    save_dict_csv(options_path, options)
 
     if options['load_params'] is True:
         adt.load_params(options['params_file'])
