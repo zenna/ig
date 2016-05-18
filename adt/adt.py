@@ -75,7 +75,7 @@ class Interface():
         print("Calling", args)
         # shapes = [type.get_shape(add_batch=True) for type in self.lhs]
         # output_args = {'batch_norm_update_averages' : True, 'batch_norm_use_averages' : False}
-        output_args = {'deterministic' : False}
+        output_args = {'deterministic' : True}
         outputs, params = self.func_space(*args, output_args = output_args, params = self.params, inp_shapes = self.inp_shapes, out_shapes = self.out_shapes, **self.func_space_kwargs)
         return outputs
 
