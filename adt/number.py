@@ -99,8 +99,8 @@ def main(argv):
     options['compile_fns'] = True
     options['save_params'] = True
     options['train'] = True
-    options['nblocks'] = 1
-    options['block_size'] = 1
+    options['nblocks'] = 2
+    options['block_size'] = 2
     options['batch_size'] = 1024
     options['nfilters'] = 24
     options['layer_width'] = 50
