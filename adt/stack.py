@@ -131,7 +131,8 @@ def main(argv):
 
     X_train, y_train, X_val, y_val, X_test, y_test = load_dataset()
     sfx = gen_sfx_key(('adt', 'nblocks', 'block_size', 'nfilters'), options)
-    print(options)
+    options['template'] = parse_template(options['template'])
+
     adt, pdt = stack_adt(X_train, options, push_args=options,
                          nitems=options['nitems'], pop_args=options,
                          batch_size=options['batch_size'])
