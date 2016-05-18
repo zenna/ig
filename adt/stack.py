@@ -115,6 +115,7 @@ def main(argv):
     global adt, pdt
 
     cust_options = {}
+    cust_options['nitems'] = (int, 3)
     cust_options['num_epochs'] = (int, 100)
     cust_options['compile_fns'] = (True,)
     cust_options['save_params'] = (True,)
@@ -132,7 +133,8 @@ def main(argv):
     sfx = gen_sfx_key(('adt', 'nblocks', 'block_size', 'nfilters'), options)
     print(options)
     adt, pdt = stack_adt(X_train, options, push_args=options,
-                         pop_args=options, batch_size=options['batch_size'])
+                         nitems=options['nitems'], pop_args=options,
+                         batch_size=options['batch_size'])
 
     save_dir = mk_dir(sfx)
     load_train_save(options, adt, pdt, sfx, save_dir)
