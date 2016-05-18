@@ -1,9 +1,12 @@
 import lasagne
 from theano import function
 import time
+from lasagne.updates import *
+import os
+
 
 class TrainParams():
-    def __init__(self, adt, train_fn, call_fns, generators, gen_to_inputs,
+    def __init__(self, adt, train_fn, call_fns, generators,  gen_to_inputs,
                  train_outs, hyperparams):
         return self
 
@@ -12,11 +15,12 @@ def get_updates(loss, params, options):
     updates = {}
     print("Params", params)
     if options['update'] == 'momentum':
-        updates = lasagne.updates.momentum(loss, params, learning_rate=options['learning_rate'], momentum=options['momentum'])
+        updates = momentum(loss, params, learning_rate=options['learning_rate'],
+                           momentum=options['momentum'])
     elif options['update'] == 'adam':
-        updates = lasagne.updates.adam(loss, params, learning_rate=options['learning_rate'])
+        updates = adam(loss, params, learning_rate=options['learning_rate'])
     elif options['update'] == 'rmsprop':
-        updates = lasagne.updates.rmsprop(loss, params, learning_rate=options['learning_rate'])
+        updates = rmsprop(loss, params, learning_rate=options['learning_rate'])
     return updates
 
 
@@ -58,7 +62,8 @@ def compile_fns(funcs, consts, forallvars, axioms, train_outs, options):
     return train_fn, call_fns
 
 
-def train(adt, pdt, num_epochs=1000, summary_gap=100, save_every=10, sfx=''):
+def train(adt, pdt, num_epochs=1000, summary_gap=100, save_every=10, sfx='',
+          save_dir="./"):
     """One epoch is one pass through the data set"""
     print("Starting training...")
     for epoch in range(num_epochs):
@@ -79,6 +84,7 @@ def train(adt, pdt, num_epochs=1000, summary_gap=100, save_every=10, sfx=''):
             train_batches += 1
             gens = [gen.next() for gen in pdt.generators]
             if i % save_every == 0:
-                stamped_sfx = str(time.time()) + "_" + sfx
+                stamped_sfx = "epoch_%s_run_%s_%s" % (epoch, i, sfx)
+                path = os.path.join(save_dir, stamped_sfx)
                 adt.save_params(stamped_sfx)
         print("epoch: ", epoch, " Total loss per epoch: ", train_err)

@@ -270,15 +270,6 @@ def iterate_minibatches(inputs, batchsize, shuffle=False):
             excerpt = slice(start_idx, start_idx + batchsize)
         yield inputs[excerpt]
 
-# Create directory with timestamp
-def mk_dir():
-    datadir = os.environ['DATADIR']
-    newdirname = str(time.time())
-    full_dir_name = os.path.join(datadir, newdirname)
-    print("Data will be saved to", full_dir_name)
-    os.mkdir(full_dir_name)
-    return full_dir_name
-
 def make_dict_output(f, dict):
     lambda x: f(x)
 

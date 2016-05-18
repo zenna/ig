@@ -1,18 +1,22 @@
 from __future__ import print_function
 
 import numpy as np
-import sys, getopt
+import sys
+import getopt
 import os
 import scipy.ndimage
 import csv
+import time
 
-def load_voxels_binary(fname, width, height, depth, max_value=255.0, zoom = 1, order = 1):
+
+def load_voxels_binary(fname, width, height, depth, max_value=255.0, zoom=1,
+                       order=1):
     data = np.fromfile(fname, dtype='uint8')
     voxels = np.reshape(data, (width, height, depth))/float(max_value)
     if zoom == 1:
         return voxels
     else:
-        return scipy.ndimage.zoom(voxels, zoom, order = order)
+        return scipy.ndimage.zoom(voxels, zoom, order=order)
 
 # def load_all_data(data, zoom = 1):
 #     datas = []
@@ -103,3 +107,13 @@ def handle_args(argv):
 
     print(options)
     return options
+
+
+def mk_dir(sfx = ''):
+    "Create directory with timestamp"
+    datadir = os.environ['DATADIR']
+    newdirname = str(time.time()) + sfx
+    full_dir_name = os.path.join(datadir, newdirname)
+    print("Data will be saved to", full_dir_name)
+    os.mkdir(full_dir_name)
+    return full_dir_name

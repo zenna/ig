@@ -112,7 +112,8 @@ def main(argv):
                           succ_args=options, add_args=options,
                           mul_args=options, batch_size=options['batch_size'])
 
-    load_train_save(options, adt, pdt, sfx)
+    save_dir = mk_dir(sfx)
+    load_train_save(options, adt, pdt, sfx, save_dir)
 
 if __name__ == "__main__":
     main(sys.argv[1:])
