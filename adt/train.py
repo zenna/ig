@@ -3,6 +3,7 @@ from theano import function
 import time
 from lasagne.updates import *
 import os
+import numpy as np
 
 
 class TrainParams():

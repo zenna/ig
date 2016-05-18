@@ -5,8 +5,9 @@ from ig.util import *
 from train import *
 from common import *
 
-# theano.config.optimizer = 'None'
+# theano.config.optimizer = 'Non    e'
 theano.config.optimizer = 'fast_compile'
+
 
 def stack_adt(train_data, options, stack_shape=(1, 28, 28), push_args={},
               pop_args={}, item_shape=(1, 28, 28), batch_size=512, nitems=3):
@@ -139,6 +140,7 @@ def stack_unstack(n, stack, offset=0):
 def whitenoise(batch_size):
     return floatX(np.array(np.random.rand(batch_size,1,28,28)*2**8, dtype='int'))/256
 
+
 def main(argv):
     # Args
     global options
@@ -154,7 +156,7 @@ def main(argv):
     options['save_params'] = True
     options['train'] = True
     options['nblocks'] = 1
-    options['block_size'] = 1
+    options['block_size'] = 2
     options['batch_size'] = 512
     options['nfilters'] = 24
     options['adt'] = 'stack'
