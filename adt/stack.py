@@ -16,10 +16,8 @@ def stack_adt(train_data, options, stack_shape=(1, 28, 28), push_args={},
     Item = Type(item_shape)
 
     # Interface
-    push = Interface([Stack, Item], [Stack], conv_res_net, width=28, height=28,
-                     name='push', **push_args)
-    pop = Interface([Stack], [Stack, Item], conv_res_net, width=28, height=28,
-                    name='pop', **pop_args)
+    push = Interface([Stack, Item], [Stack], **push_args)
+    pop = Interface([Stack], [Stack, Item], conv_res_net, **pop_args)
     funcs = [push, pop]
 
     # train_outs
@@ -116,6 +114,8 @@ def main(argv):
 
     cust_options = {}
     cust_options['nitems'] = (int, 3)
+    cust_options['width'] = (int, 28)
+    cust_options['height'] = (int 28)
     cust_options['num_epochs'] = (int, 100)
     cust_options['compile_fns'] = (True,)
     cust_options['save_params'] = (True,)
@@ -125,7 +125,7 @@ def main(argv):
     cust_options['batch_size'] = (int, 512)
     cust_options['nfilters'] = (int, 24)
     cust_options['layer_width'] = (int, 50)
-    cust_options['adt'] = (str, 'sta')
+    cust_options['adt'] = (str, 'stack')
     cust_options['template'] = (str, 'res_net')
     options = handle_args(argv, cust_options)
 
