@@ -125,6 +125,29 @@ class Axiom():
         return losses
 
 
+class CondAxiom():
+    "If cond_lhs= cond_rhs then conseq_lhs = conseq_rhs else alt_lhs = alt_rhs"
+    def __init__(self, cond_lhs, cond_rhs, conseq_lhs, conseq_rhs, alt_lhs,
+                 alt_rhs, name=''):
+        assert len(cond_lhs) == len(cond_rhs) == len(conseq_lhs) == len(conseq_rhs) == len(alt_lhs) == len(alt_rhs)
+        self.cond_lhs = cond_lhs
+        self.cond_rhs = cond_rhs
+        self.conseq_lhs = conseq_lhs
+        self.conseq_rhs = conseq_rhs
+        self.alt_lhs = alt_lhs
+        self.alt_rhs = alt_rhs
+        self.num_constraints = len(cond_lhs)
+
+    def get_losses(self, dist=mse):
+        losses = []
+        for i in self.num_constraints:
+            cond = dist(self.cond_lhs[i], self.cond_rhs)
+            conseq = dist(self.conseq_lhs[i], self.conseq_rhs)
+            alt = dist(self.alt_lhs[i], self.alt_rhs)
+            loss.append(cond*conseq + (1-cond) * alt)
+        return losses
+        return losses
+
 class BoundAxiom():
     "Constraints a type to be within specifiec bounds"
     def __init__(self, type, name='bound_loss'):
