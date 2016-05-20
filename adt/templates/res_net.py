@@ -3,7 +3,6 @@ import numpy as np
 from common import *
 import theano
 import lasagne
-from collections import OrderedDict
 
 from lasagne.layers import InputLayer
 from lasagne.layers import ReshapeLayer

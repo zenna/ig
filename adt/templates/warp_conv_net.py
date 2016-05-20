@@ -1,8 +1,17 @@
-import numy as np
+import numpy as np
+import lasagne
+from lasagne.utils import floatX
+from theano import shared
+import theano.tensor as T
 from lasagne.layers import TransformerLayer
 from lasagne.layers import DenseLayer
+from lasagne.layers import InputLayer
+from lasagne.layers import ReshapeLayer
+from lasagne.layers import ConcatLayer
 from lasagne.init import HeNormal, Constant
+from lasagne.layers import get_output
 from lasagne.nonlinearities import softmax, rectify, sigmoid
+from common import *
 import theano.sandbox.cuda.dnn
 if theano.sandbox.cuda.dnn.dnn_available():
     from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
@@ -16,25 +25,31 @@ def warp_layer(l_in, out_xy, sfx, params):
     x_in, y_in = inp_shape[2], inp_shape[3]
     sample_factor = (float(x_in)/float(out_xy[0]),
                      float(y_in)/float(out_xy[1]))
-    W = lasagne.init.Constant(0.0)
-    W = params['W_%s' % sfx, lasagne.init.Constant(0.0)]
+    # W = lasagne.init.Constant(0.0)
+    # print("Aah", 'W_%s' % sfx)
+    # W = params['W_%s' % sfx, lasagne.init.Constant(0.0)]
     b = floatX(np.zeros((2, 3)))
     b[0, 0] = 1
     b[1, 1] = 1
     b = b.flatten()
+    b = floatX([b])
     b = shared(b)
+    d = T.repeat(b, 5, axis=0)
     params['b_%s' % sfx, b]
-    l_loc = lasagne.layers.DenseLayer(l_in, num_units=6, W=W, b=b,
-                                      nonlinearity=None)
+    # l_loc = lasagne.layers.DenseLayer(l_in, num_units=6,
+    #                                   nonlinearity=None)
+    l_loc = InputLayer((5, 6), input_var=d)
     l_out = TransformerLayer(l_in, l_loc, downsample_factor=sample_factor)
-    params.set("W_%s" % sfx, l_loc.W)
+    # params.set("W_%s" % sfx, b)
+    print(l_out.output_shape[2:], out_xy)
     assert l_out.output_shape[2:] == out_xy
     return l_out
 
 
-def mchannels(shape):
+def nchannels(shape):
     assert len(shape) == 4
     return shape[1]
+
 
 def warp_conv_net(*inputs, **kwargs):
     """A residual convolutional network of n inputs and m outputs."""
@@ -59,20 +74,20 @@ def warp_conv_net(*inputs, **kwargs):
         inp_ndim = len(inp_shapes[i])
         if inp_ndim == 4 and inp_shapes[i][2] == width and inp_shapes[i][3] == height:
             print("input ", i, " does not need reshaping or projecting")
-            i = InputLayer(inp_shapes[i], input_var=inputs[i])
-            input_channels.append(i)
+            inp = InputLayer(inp_shapes[i], input_var=inputs[i])
+            input_channels.append(inp)
             channel_sizes.append(inp_shapes[i][1])
         elif inp_ndim == 4:
             # It is an image but the wrong size
             print("input", i, "is image but of wrong size, rescaling")
-            i = InputLayer(inp_shapes[i], input_var=inputs[i])
-            warped = warp_layer(i, (width, height), "in_warp_%s" % i, params)
+            inp = InputLayer(inp_shapes[i], input_var=inputs[i])
+            warped = warp_layer(inp, (width, height), "in_warp_%s" % i, params)
             input_channels.append(warped)
             channel_sizes.append(inp_shapes[i][1])
         else:
             print("input", i, "is not image, reshaping to vector then warping")
-            i = InputLayer(inp_shapes[i], input_var=inputs[i])
-            r = ReshapeLayer(i, ([0], 1, 1, -1))
+            inp = InputLayer(inp_shapes[i], input_var=inputs[i])
+            r = ReshapeLayer(inp, ([0], 1, 1, -1))
             warped = warp_layer(r, (width, height), "in_warp_%s" % i, params)
             input_channels.append(warped)
             channel_sizes.append(1)
@@ -106,7 +121,7 @@ def warp_conv_net(*inputs, **kwargs):
     out_nchannel = []
     out_xys = []
     for i in range(noutputs):
-        out_shape == out_shapes[i]
+        out_shape = out_shapes[i]
         if len(out_shape) == 4:
             out_nchannel.append(out_shape[1])
             out_xy = out_shape[2:]
@@ -127,29 +142,30 @@ def warp_conv_net(*inputs, **kwargs):
     # Output Projection
     net['output'] = prev_layer
     output_product = lasagne.layers.get_output(net['output'], **output_args)
-    pre_warp_params = params_from_layer(net['output'])
+    all_params = params_from_layer(net['output'])
     outputs = []
 
-    warp_params = []
+    # warp_params = []
     lb = 0
     for i in range(noutputs):
-        out_shape == out_shapes[i]
-        output = outputs[:, lb:out_nchannel[i]]
+        out_shape = out_shapes[i]
+        ub = out_nchannel[i]
+        print("OK",out_nchannel, lb, ub)
+        output = output_product[:, lb:ub]
         o = InputLayer((None, out_nchannel[i], width, height),
                        input_var=output)
-        w = warped_layer(o, out_xys[i], "out_warp_%s" % i, params)
-        if nchannels(out_shape) != 4:
+        w = warp_layer(o, out_xys[i], "out_warp_%s" % i, params)
+        if len(out_shape) == 4:
+            assert out_shape == w.output_shape
+        else:
+            print("Reshaping output ", i)
             w = ReshapeLayer(w, ([0],) + out_shape[1:])
-        warp_params.append(params_from_layer(w))
+        all_params.update(params_from_layer(w))
         outputs.append(get_output(w))
         lb = lb + out_nchannel[i]
-
     assert lb == nout_channels
 
-    all_params = pre_warp_params + warp_params
     print("all_params", all_params)
-    print("pre_warp_params", params)
-    print("warp_params", params)
     params.add_tagged_params(all_params)
     params.check(lasagne.layers.get_all_params(prev_layer))
     return outputs, params

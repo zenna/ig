@@ -101,6 +101,7 @@ def f(zero_field, field, zero_batch_size):
     zero_field_batch = repeat_to_batch(zero_field.input_var, zero_batch_size)
     return T.concatenate(zero_field_batch, field[zero_batch_size:])
 
+
 def scalar_field_adt(voxel_grids, res, options, niters=3, field_shape=(100,),
                      npoints=100, batch_size=64, s_args={}, add_args={}):
     # Types
@@ -108,10 +109,12 @@ def scalar_field_adt(voxel_grids, res, options, niters=3, field_shape=(100,),
     Field = Type(field_shape)
     Points = Type(points_shape)
     Scalar = Type((npoints,))
+    Rotation = Type((3, 3))
 
     # Interface
-    s = Interface([Field, Points], [Scalar], res_net, **s_args)
-    add = Interface([Field, Points], [Field], res_net, **add_args)
+    s = Interface([Field, Points], [Scalar], 's', **s_args)
+    add = Interface([Field, Points], [Field], 'add', **add_args)
+    rotate = Interface([Field, Rotation], [Field], 'rotate', **rotate_args)
     funcs = [s, add]
 
     # Constants
@@ -121,11 +124,11 @@ def scalar_field_adt(voxel_grids, res, options, niters=3, field_shape=(100,),
     # Variables
     field = ForallVar(Field)
     pos_delta = ForAllVar(Points)
+    rot_matrix = ForAllVar(Rotation)
     poss = [ForAllVar(Points) for i in range(niters*2)]
-    forallvars = poss + [pos_delta, field]
+    forallvars = poss + [pos_delta, field, rot_matrix]
 
     # PreProcessing
-    # Field
     zero_field_batch = repeat_to_batch(zero_field.input_var, batch_size)
     zero_batch_frac = 0.5
     nfields = niters
@@ -160,6 +163,10 @@ def scalar_field_adt(voxel_grids, res, options, niters=3, field_shape=(100,),
         field = field2
         axioms.append(axiom2)
         axioms.append(axiom3)
+
+    # Rotation axioms
+    axiom_r1 = Axiom(s(rotate(field2, rot_matrix), points),
+                     s(field2, points*rot_matrix))
 
     train_outs = [zero_field.input_var] + fields
     # Generators
@@ -198,61 +205,41 @@ def main(argv):
     # Args
     global options
     global test_files, train_files
-    global net, output_layer, cost_f, cost_f_dict, val_f, call_f, call_f_dict
     global views, outputs, net
-    global funcs, consts, forallvars, axioms, generators, train_fn, call_fns
     global push, pop
     global X_train
-    global adt, pbt
+    global adt, pdt
+    global sfx
+    global save_dir
 
-    options = handle_args(argv)
-    options['num_epochs'] = 50
-    options['compile_fns'] = True
-    options['save_params'] = True
-    options['train'] = True
-    options['nblocks'] = 1
-    options['block_size'] = 1
-    options['batch_size'] = 512
-    options['nfilters'] = 24
-    options['layer_width'] = 101
-    options['adt'] = 'scalarfield'
-    res = options['res'] = 32
+    cust_options = {}
+    cust_options['num_epochs'] = (int, 100)
+    cust_options['compile_fns'] = (True,)
+    cust_options['save_params'] = (True,)
+    cust_options['train'] = (True,)
+    cust_options['nblocks'] = (int, 2)
+    cust_options['save_every'] = (int, 100)
+    cust_options['block_size'] = (int, 2)
+    cust_options['batch_size'] = (int, 1024)
+    cust_options['nfilters'] = (int, 24)
+    cust_options['layer_width'] = (int, 50)
+    cust_options['adt'] = (str, 'number')
+    cust_options['width'] = (int, 10)
+    cust_options['height'] = (int, 10)
+    cust_options['template'] = (str, 'stack')
+    options = handle_args(argv, cust_options)
 
-    sfx_dict = {}
-    for key in ('adt', 'nblocks', 'block_size', 'nfilters'):
-        sfx_dict[key] = options[key]
-    sfx = stringy_dict(sfx_dict)
-    print("sfx:", sfx)
-    print(options)
-
-    # X_train = ['test', 'test']
     voxel_grids = np.load("/home/zenna/data/ModelNet40/alltrain32.npy")
     adt, pbt = scalar_field_adt(voxel_grids, res, options, s_args=options,
                                 npoints=500, field_shape=(102,),
                                 add_args=options,
                                 batch_size=options['batch_size'])
 
-    if options['load_params'] is True:
-        for i in range(len(funcs)):
-            funcs[i].load_params_fname("%s_stack_interface_%s.npz" % (sfx, i))
-        print("Loaded params")
+    sfx = gen_sfx_key(('adt', 'nblocks', 'block_size', 'nfilters'), options)
+    options['template'] = parse_template(options['template'])
 
-    if options['train'] is True:
-        train_pbt(pbt, num_epochs=options['num_epochs'])
-
-    if options['save_params'] is True:
-        for i in range(len(funcs)):
-            funcs[i].save_params("%s_stack_interface_%s" % (sfx, i))
-        print("saved params")
-
-# def circular_indices(lb, ub, thresh):
-#     diff = ub - lb
-#     if ub > thresh:
-#         adada = diff - (thresh - lb)
-#         return np.concatenate([np.arange(lb, thresh), np.arange(adada)])
-#     else:
-#         return np.arange(lb, ub)
-
+    save_dir = mk_dir(sfx)
+    load_train_save(options, adt, pdt, sfx, save_dir)
 
 # def get_all_indices(res):
 #     v = np.zeros((res, res, res))

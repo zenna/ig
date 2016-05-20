@@ -6,7 +6,7 @@ from train import *
 from common import *
 
 # theano.config.optimizer = 'None'
-theano.config.optimizer = 'fast_compile'
+# theano.config.optimizer = 'fast_compile'
 
 
 def number_adt(options, niters=3, number_shape=(5,), batch_size=64,
@@ -17,52 +17,56 @@ def number_adt(options, niters=3, number_shape=(5,), batch_size=64,
     BinInteger = Type((1,))  # A python integer
 
     # Interface
-    succ = Interface([Number], [Number], 'succ', **succ_args)
-    add = Interface([Number, Number], [Number], 'add', **add_args)
-    mul = Interface([Number, Number], [Number], 'mul', **mul_args)
+    # succ = Interface([Number], [Number], 'succ', **succ_args)
+    # add = Interface([Number, Number], [Number], 'add', **add_args)
+    # mul = Interface([Number, Number], [Number], 'mul', **mul_args)
     encode = Interface([BinInteger], [Number], 'encode', **encode_args)
     decode = Interface([Number], [BinInteger], 'decode', **decode_args)
-    funcs = [succ, add, mul, encode, decode]
+    funcs = [encode, decode]
+    # funcs = [succ, add, mul, encode, decode]
 
     # Vars
     # a = ForAllVar(Number)
     # b = ForAllVar(Number)
     bi = ForAllVar(BinInteger)
-    bj = ForAllVar(BinInteger)
+    # bj = ForAllVar(BinInteger)
 
-    forallvars = [bi, bj]
+    # forallvars = [bi, bj]
+    forallvars = [bi]
 
     # Consts
     zero = Const(Number)
     print(zero)
     zero_batch = repeat_to_batch(zero.input_var, batch_size)
     consts = [zero]
+    consts = []
 
     # axioms
     (encoded1,) = encode(bi)
-    (encoded2,) = encode(bj)
+    # (encoded2,) = encode(bj)
 
     # axiom_zero = Axiom(decode(zero_batch), (0,))
 
     axiom_ed = Axiom(decode(encoded1), (bi.input_var,))
-    (succ_encoded,) = succ(encoded1)
-    axiom_succ_ed = Axiom(decode(succ_encoded), (bi.input_var + 1,))
-
-    encode_axioms = [axiom_ed, axiom_succ_ed]
-
-    a = encoded1
-    b = encoded2
-
-    (succ_b,) = succ(b)
-    mul_a_succ_b = mul(a, succ_b)
-    mul_axiom2_rhs = mul(a, b) + [a]
-
-    add_axiom1 = Axiom(add(a, zero_batch), (a,))
-    add_axiom2 = Axiom(add(a, succ_b), succ(*add(a, b)))
-    mul_axiom1 = Axiom(mul(a, zero_batch), (zero_batch,))
-    mul_axiom2 = Axiom(mul(a, succ_b), add(*mul_axiom2_rhs))
-    arith_axioms = [add_axiom1, add_axiom2, mul_axiom1, mul_axiom2]
-    axioms = encode_axioms + arith_axioms
+    # (succ_encoded,) = succ(encoded1)
+    # axiom_succ_ed = Axiom(decode(succ_encoded), (bi.input_var + 1,))
+    #
+    # encode_axioms = [axiom_ed, axiom_succ_ed]
+    #
+    # a = encoded1
+    # b = encoded2
+    #
+    # (succ_b,) = succ(b)
+    # mul_a_succ_b = mul(a, succ_b)
+    # mul_axiom2_rhs = mul(a, b) + [a]
+    #
+    # add_axiom1 = Axiom(add(a, zero_batch), (a,))
+    # add_axiom2 = Axiom(add(a, succ_b), succ(*add(a, b)))
+    # mul_axiom1 = Axiom(mul(a, zero_batch), (zero_batch,))
+    # mul_axiom2 = Axiom(mul(a, succ_b), add(*mul_axiom2_rhs))
+    # arith_axioms = [add_axiom1, add_axiom2, mul_axiom1, mul_axiom2]
+    # axioms = encode_axioms + arith_axioms
+    axioms = [axiom_ed]
 
     # generators
     def realistic_nums(*shape):
@@ -71,7 +75,7 @@ def number_adt(options, niters=3, number_shape=(5,), batch_size=64,
         #               np.random.randint(-1, 10, shape))
 
     generators = [infinite_samples(realistic_nums, batch_size, (1,))
-                  for i in range(2)]
+                  for i in range(1)]
 
     train_outs = []
     gen_to_inputs = identity
@@ -108,6 +112,8 @@ def main(argv):
     cust_options['nfilters'] = (int, 24)
     cust_options['layer_width'] = (int, 50)
     cust_options['adt'] = (str, 'number')
+    cust_options['width'] = (int, 10)
+    cust_options['height'] = (int, 10)
     cust_options['template'] = (str, 'res_net')
     options = handle_args(argv, cust_options)
 
@@ -115,7 +121,7 @@ def main(argv):
     options['template'] = parse_template(options['template'])
 
     adt, pdt = number_adt(options,
-                          number_shape=(50,),
+                          number_shape=(20,),
                           succ_args=options, add_args=options,
                           mul_args=options, encode_args=options,
                           decode_args=options,

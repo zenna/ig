@@ -2,7 +2,10 @@ from ig.util import *
 from ig.io import *
 from train import *
 import theano.tensor as T
-from templates import *
+from templates.conv_net import *
+from templates.warp_conv_net import *
+from templates.res_net import *
+
 
 def gen_sfx_key(keys, options):
     sfx_dict = {}
@@ -22,6 +25,8 @@ def parse_template(template):
         return res_net
     elif template == 'conv_net':
         return conv_res_net
+    elif template == 'warp_conv_net':
+        return warp_conv_net
     else:
         print("Invalid Template ", template)
         raise ValueError

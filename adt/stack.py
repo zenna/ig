@@ -44,18 +44,24 @@ def stack_adt(train_data, options, stack_shape=(1, 28, 28), push_args={},
             (pop_stack, pop_item) = pop(pop_stack)
             axiom = Axiom((pop_item,), (items[j].input_var,))
             axioms.append(axiom)
-
-    # Generators
-    generators = [infinite_batches(train_data, batch_size, shuffle=True)
-                  for i in range(nitems)]
-    train_fn, call_fns = compile_fns(funcs, consts, forallvars, axioms,
-                                     train_outs, options)
     stack_adt = AbstractDataType(funcs, consts, forallvars, axioms,
                                  name='stack')
+    return stack_adt
+
+def stack_pdt(adt, options):
+    # Generators
+    train_fn, call_fns = compile_fns(adt.funcs, adt.consts, adt.forallvars,
+                                     adaxioms, adt.train_outs, options)
+    push, pop = call_fns
+    generators = [infinite_batches(train_data, batch_size, shuffle=True)
+                  for i in range(nitems)]
+
+    train_fn, call_fns = compile_fns(funcs, consts, forallvars, axioms,
+                                     train_outs, options)
+
     stack_pdt = ProbDataType(stack_adt, train_fn, call_fns, generators,
                              gen_to_inputs, train_outs)
-    return stack_adt, stack_pdt
-
+    return stack_pdt
 
 # Validation
 def validate_what(data, batch_size, nitems, es, push, pop):
@@ -136,9 +142,10 @@ def main(argv):
     sfx = gen_sfx_key(('adt', 'nblocks', 'block_size', 'nfilters'), options)
     options['template'] = parse_template(options['template'])
 
-    adt, pdt = stack_adt(X_train, options, push_args=options,
-                         nitems=options['nitems'], pop_args=options,
-                         batch_size=options['batch_size'])
+    adt = stack_adt(X_train, options, push_args=options,
+                    nitems=options['nitems'], pop_args=options,
+                    batch_size=options['batch_size'])
+    pdt = stack_pdt(adt, options)
 
     save_dir = mk_dir(sfx)
     load_train_save(options, adt, pdt, sfx, save_dir)
